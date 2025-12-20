@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  {% load static %}
+  <meta charset="utf-8" />
+  <title>Travel Atlas & Log</title>
+  
+  <link rel="stylesheet" href="{% static 'blog/css/pygments.css' %}">
+  <link rel="stylesheet" href="{% static 'blog/css/codehilite_extra.css' %}">
+  <link rel="stylesheet" href="{% static 'blog/css/site.css' %}">
+  
+  <style>
+    html, body {
+      height: 100%;
+      background: #000;
+    }
+
+    body { margin:0; font-family: system-ui, sans-serif; overflow-x: hidden; }
+    .wrap { display:flex; min-height:100vh; background:#000; }
+
+    .globe {
+      flex: 1;
+      background:#000;
+      color:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 16px;
+    }
+
+    /* ✅ 왼쪽 패널 레이아웃 */
+    .left { width: min(520px, 90%); }
+
+    .country-search {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #333;
+      background: #0b0b0b;
+      color: #fff;
+      outline: none;
+      margin-top: 10px;
+    }
+    
+    /* ✅ 글 선택(읽기 모드)일 때: 목차/페이지네이션 숨김 */
+    #board.reading .toc { display: none; }
+
+    /* pager는 숨기지 말고, 읽기모드에서는 '목록 버튼만' 보이게 */
+    #board.reading .pager .pager-nav { display: none; }
+    #board.reading .pager .pager-back { display: inline-block; }
+
+    .pager { display:flex; gap:10px; align-items:center; margin-top:10px; }
+    .pager .pager-back { display: inline-block; }
+    .pager .pager-nav { display: inline-flex; gap:10px; align-items:center; }
+
+    
+    /* 읽기 모드에서 본문이 위로 올라오도록 여백 조정(선택) */
+    #board.reading .content {
+      margin-top: 10px;
+    }
+
+
+    .country-list {
+      margin-top: 10px;
+      max-height: 280px;
+      overflow: auto;
+      border: 1px solid #222;
+      border-radius: 10px;
+      padding: 10px;
+      background: #0b0b0b;
+    }
+
+    .country-link {
+      display:block;
+      padding: 6px 8px;
+      border-radius: 8px;
+      text-decoration: none;
+      opacity: .85;
+      color: inherit;
+    }
+    .country-link:hover { background:#141414; opacity: 1; }
+    .country-link.active { background:#1a1a1a; text-decoration: underline; opacity: 1; }
+
+
+    /* 보드: 레이아웃에서 분리 */
+    .board {
+      position: fixed;
+      top: 0;
+      right: 0;
+      height: 100vh;
+    
+      width: 420px;
+      border-left: 1px solid #222;
+      padding: 16px;
+      background: #111;
+      color:#fff;
+    
+      display: flex;
+      flex-direction: column;
+    
+      /* 기본: 닫힘 */
+      transform: translateX(100%);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 240ms ease, opacity 240ms ease;
+    }
+    
+    /* 보드 열림 */
+    .wrap.has-board .board {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    
+    /* 닫기 애니메이션 */
+    .wrap.closing .board {
+      transform: translateX(100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+    
+    /* 보드가 열릴 때 왼쪽 콘텐츠가 가려지지 않도록 공간 확보(선택이지만 추천) */
+    .wrap {
+      transition: padding-right 240ms ease;
+    }
+    .wrap.has-board {
+      padding-right: 420px;
+    }
+    .wrap.no-board {
+      padding-right: 0;
+    }
+    
+    /* 초기 화면에서 globe 중앙 */
+    .wrap.no-board { justify-content: center; }
+    .wrap.no-board .globe {
+      flex: 0 0 auto;
+      width: min(720px, 92vw);
+    }
+
+
+    .hint { opacity:.7; font-size: 14px; }
+
+    /* _board.html에서 쓰는 스타일도 home에 있어도 OK */
+    .board-header {
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap: 12px;
+    }
+
+    .close-btn {
+      border: 1px solid #333;
+      background: #151515;
+      color: #fff;
+      border-radius: 10px;
+      padding: 6px 10px;
+      cursor: pointer;
+      opacity: .85;
+      text-decoration: none;
+    }
+    .close-btn:hover { opacity: 1; }
+
+    .tabs { margin-top:14px; }
+    .tabs a { margin-right: 10px; opacity:.7; text-decoration:none; color: inherit; }
+    .tabs a.active { opacity:1; text-decoration:underline; }
+
+    .toc {
+      margin-top: 12px;
+      overflow: auto;
+      border: 1px solid #222;
+      border-radius: 10px;
+      padding: 10px;
+      background: #0f0f0f;
+      max-height: 280px;
+    }
+    .toc a { display:block; padding:6px 0; text-decoration:none; border-bottom:1px solid #222; opacity:.8; color: inherit; }
+    .toc a.active { text-decoration: underline; opacity: 1; }
+
+    .content {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top:1px solid #222;
+      white-space: pre-wrap;
+      flex: 1;
+      overflow: auto;
+      padding-right: 6px;
+    }
+    .content p { margin: 0 0 12px 0; line-height: 1.7; }
+    .content h1, .content h2, .content h3 { margin: 16px 0 10px; }
+    .content ul, .content ol { padding-left: 18px; margin: 8px 0 12px; }
+    .content a { text-decoration: underline; }
+    .content img { max-width: 100%; height: auto; border-radius: 10px; }
+
+    .content pre {
+      padding: 12px;
+      border: 1px solid #222;
+      border-radius: 10px;
+      overflow: auto;
+      background: #0b0b0b;
+    }
+    .content code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+    }
+    
+    
+    .flag-img {
+      border-radius: 6px;
+      margin: 6px 0 10px 0;
+      display: block;
+    }
+    
+    .cover-img {
+      width: 100%;
+      height: auto;
+      border-radius: 10px;
+      margin: 8px 0 12px 0;
+      display: block;
+    }
+    
+    .htmx-indicator {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 9999;
+    
+      display: none;
+      padding: 8px 10px;
+      border: 1px solid #333;
+      border-radius: 10px;
+      background: #151515;
+      color: #fff;
+      opacity: .9;
+      font-size: 13px;
+    }
+    
+    .htmx-indicator { display:none; }
+    .htmx-request .htmx-indicator,
+    .htmx-request.htmx-indicator { display:inline-block; }
+
+    .gallery {
+      margin-top: 12px;
+      display: grid;
+      gap: 12px;
+    }
+    
+    .gallery-item img {
+      width: 100%;
+      height: auto;
+      border-radius: 10px;
+      display: block;
+    }
+    
+    .gallery {
+      margin-top: 12px;
+      display: grid;
+      gap: 12px;
+    }
+    
+    .gallery-item {
+      margin: 0;
+    }
+    
+    .gallery-item img {
+      width: 100%;
+      height: auto;
+      border-radius: 10px;
+      display: block;
+    }
+    
+    .gallery {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    
+    .content figure.post-img {
+      margin: 12px 0;
+    }
+    
+    .content figure.post-img img {
+      width: 100%;
+      height: auto;
+      border-radius: 10px;
+      display: block;
+    }
+    
+    .content figure.post-img figcaption {
+      margin-top: 6px;
+      opacity: .7;
+      font-size: 14px;
+    }
+    
+    .gallery {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .gallery-item img {
+      display: block;
+      width: 100%;
+      border-radius: 10px;
+    }
+    
+    /* 본문 중간 삽입 이미지(figure.md-img)도 통일 */
+    .md-img img {
+      display: block;
+      width: 100%;
+      border-radius: 10px;
+    }
+
+
+
+    
+
+    
+  </style>
+</head>
+
+<body>
+  <div class="wrap no-board" data-has-board="{% if selected_country %}1{% else %}0{% endif %}">
+    <div class="globe">
+      <div class="left">
+        <h1 style="margin:0 0 8px 0;">Globe Area</h1>
+        <div class="hint">지금은 더미 영역. 다음 단계에서 회전/클릭/슬라이딩 UI 구현</div>
+
+        <div style="margin-top:16px;">
+          <div class="hint">국가 선택(임시)</div>
+
+          <input id="countrySearch" class="country-search" type="text" placeholder="국가 검색 (예: 대한민국, Japan)" />
+
+          <div class="country-list" id="countryList">
+            {% for c in countries %}
+              <a class="country-link {% if selected_country and selected_country.slug == c.slug %}active{% endif %}"
+                 href="/{{ c.slug }}/">
+                {{ c.name }}
+              </a>
+            {% empty %}
+              <div class="hint">/admin에서 Country를 먼저 추가하세요.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 우측: 보드(내용은 partial) -->
+    <div class="board" id="board">
+      {% include "blog/_board.html" %}
+    </div>
+    <div class="htmx-indicator">불러오는 중...</div>
+  </div>
+
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+
+
+
+  <script>
+  (function () {
+      const board = document.getElementById("board");
+      if (!board) return;
+    
+      function syncReadingMode() {
+        const marker = board.querySelector("[data-has-post='1']");
+        if (marker) board.classList.add("reading");
+        else board.classList.remove("reading");
+      }
+    
+      // 최초 로드 때도 동기화
+      document.addEventListener("DOMContentLoaded", syncReadingMode);
+    
+      // HTMX로 #board가 교체된 뒤에도 동기화
+      document.body.addEventListener("htmx:afterSwap", (e) => {
+        if (e.target && e.target.id === "board") {
+          syncReadingMode();
+        }
+      });
+    })();
+    (function () {
+      const wrap = document.querySelector(".wrap");
+      if (!wrap) return;
+    
+      // ✅ 로드 후: selected_country가 있는 페이지면 슬라이드 인
+      document.addEventListener("DOMContentLoaded", () => {
+        if (wrap.dataset.hasBoard === "1") {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              wrap.classList.remove("no-board");
+              wrap.classList.add("has-board");
+            });
+          });
+        }
+      });
+    
+      // ✅ 국가 검색 필터
+      const input = document.getElementById("countrySearch");
+      const list = document.getElementById("countryList");
+    
+      if (input && list) {
+        const filter = () => {
+          const q = input.value.trim().toLowerCase();
+          const links = list.querySelectorAll("a.country-link");
+          links.forEach(a => {
+            const name = (a.textContent || "").trim().toLowerCase();
+            a.style.display = name.includes(q) ? "" : "none";
+          });
+        };
+    
+        input.addEventListener("input", filter);
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") {
+            input.value = "";
+            filter();
+            input.blur();
+          }
+        });
+      }
+    
+      // ✅ 목차 클릭 시 본문 스크롤 맨 위(클릭 즉시)
+      document.addEventListener("click", (e) => {
+        const a = e.target.closest && e.target.closest("a.toc-link");
+        if (!a) return;
+        const content = document.getElementById("postContent");
+        if (content) content.scrollTop = 0;
+      });
+    
+      // ✅ HTMX로 보드가 교체된 직후에도 스크롤 맨 위
+      document.addEventListener("htmx:afterSwap", (e) => {
+        if (e.target && e.target.id === "board") {
+          const content = document.getElementById("postContent");
+          if (content) content.scrollTop = 0;
+        }
+      });
+    
+      // ✅ 닫기 버튼: 슬라이드 아웃 → / 이동
+      document.addEventListener("click", (e) => {
+        const close = e.target.closest && e.target.closest("a.close-btn");
+        if (!close) return;
+    
+        e.preventDefault();
+    
+        wrap.classList.add("closing");
+        wrap.classList.remove("has-board");
+        wrap.classList.add("no-board");
+    
+        setTimeout(() => {
+          wrap.classList.remove("closing"); // (나중 대비)
+          window.location.href = close.getAttribute("href") || "/";
+        }, 260);
+      });
+    })();
+    
+    (function () {
+      const lb = document.getElementById("lightbox");
+      const lbImg = document.getElementById("lightboxImg");
+      const lbCap = document.getElementById("lightboxCap");
+      if (!lb || !lbImg || !lbCap) return;
+    
+      function open(src, cap) {
+        lbImg.src = src;
+        lbCap.textContent = cap || "";
+        lb.classList.add("open");
+        lb.setAttribute("aria-hidden", "false");
+      }
+    
+      function close() {
+        lb.classList.remove("open");
+        lb.setAttribute("aria-hidden", "true");
+        lbImg.src = "";
+        lbCap.textContent = "";
+      }
+    
+      // 본문/갤러리 이미지 클릭 시 확대
+      document.addEventListener("click", (e) => {
+        const img = e.target.closest && e.target.closest(".content img, .gallery img, figure.md-img img");
+        if (!img) return;
+    
+        // 링크로 감싼 이미지가 있다면 기본 이동 막기
+        if (img.closest("a")) e.preventDefault();
+    
+        const src = img.getAttribute("src");
+        const capEl = img.closest("figure")?.querySelector("figcaption");
+        const cap = capEl ? capEl.textContent.trim() : "";
+        if (src) open(src, cap);
+      });
+    
+      // 라이트박스 클릭/ESC로 닫기
+      lb.addEventListener("click", close);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") close();
+      });
+    })();
+    
+    </script>
+
+    <div class="lightbox" id="lightbox" aria-hidden="true">
+      <div>
+        <img id="lightboxImg" alt="" />
+        <div class="hint" id="lightboxCap"></div>
+      </div>
+    </div>
+
+
+</body>
+</html>

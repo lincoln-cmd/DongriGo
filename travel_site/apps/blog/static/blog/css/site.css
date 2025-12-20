@@ -1,0 +1,197 @@
+/* 라이트박스 */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 99999;
+}
+.lightbox.open { display: flex; }
+
+.lightbox img {
+  max-width: min(980px, 92vw);
+  max-height: 88vh;
+  border-radius: 12px;
+}
+.lightbox .hint {
+  margin-top: 10px;
+  text-align: center;
+  max-width: min(980px, 92vw);
+}
+
+/* 본문에 삽입되는 마크다운 이미지 */
+.md-img {
+  margin: 12px 0;
+}
+
+.md-img__img {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+}
+
+.md-img__cap {
+  margin-top: 6px;
+}
+
+/* 본문 아래 자동 갤러리(기본은 세로 스택) */
+.gallery {
+  margin-top: 12px;
+}
+
+.gallery-item {
+  margin: 0 0 12px 0;
+}
+
+.gallery-item img {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+}
+/* ---------- Buttons / Links ---------- */
+.btn,
+.close-btn {
+  border: 1px solid #333;
+  background: #151515;
+  color: #fff;
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  opacity: .85;
+  text-decoration: none;
+  display: inline-block;
+}
+.btn:hover,
+.close-btn:hover { opacity: 1; }
+
+/* ---------- Search ---------- */
+.search {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+.search-input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #333;
+  background: #0b0b0b;
+  color: #fff;
+  outline: none;
+}
+.search-btn {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #333;
+  background: #151515;
+  color: #fff;
+  cursor: pointer;
+}
+
+/* ---------- Pager ---------- */
+.pager {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+.pager-nav {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* ---------- Markdown inserted image ---------- */
+.md-img { margin: 12px 0; }
+.md-img img {
+  width: 100%;
+  border-radius: 10px;
+  display: block;
+}
+.md-img figcaption { margin-top: 6px; }
+
+/* ---------- Gallery ---------- */
+.gallery { margin-top: 12px; }
+.gallery-item { margin: 0 0 12px 0; }
+.gallery-item img {
+  width: 100%;
+  border-radius: 10px;
+  display: block;
+}
+
+/* ---------- Minor spacing helper ---------- */
+.hint-pad { padding: 6px 0; }
+
+/* ========== 검색 UI ========== */
+.search {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.search-input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #333;
+  background: #0b0b0b;
+  color: #fff;
+  outline: none;
+}
+
+.search-btn {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #333;
+  background: #151515;
+  color: #fff;
+  cursor: pointer;
+}
+
+/* ========== 간격 유틸 ========== */
+.mt-8 { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+
+/* 검색 결과 없음 같은 곳 */
+.hint-pad { padding: 6px 0; }
+
+/* ========== Markdown 이미지(본문 삽입) ========== */
+.md-img {
+  margin: 12px 0;
+}
+
+.md-img__img {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+}
+
+.md-img__cap {
+  margin-top: 6px;
+}
+
+/* ========== 본문 아래 갤러리 ========== */
+.gallery {
+  margin-top: 12px;
+}
+
+.gallery-item {
+  margin: 0 0 12px 0;
+}
+
+.gallery-item img {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+}
+
+.gallery-item figcaption {
+  margin-top: 6px;
+}
