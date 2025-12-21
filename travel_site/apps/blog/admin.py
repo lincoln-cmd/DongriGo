@@ -6,9 +6,12 @@ from .models import Country, Post, PostImage
 
 @admin.register(Country)
 class CountryAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug")
-    search_fields = ("name", "slug")
+    list_display = ("name", "slug", "iso_a2", "iso_a3")
+    search_fields = ("name", "slug", "iso_a2", "iso_a3", "aliases", "name_ko", "name_en")
+    list_filter = ("iso_a2",)
     prepopulated_fields = {"slug": ("name",)}
+
+    
 
 
 class PostImageInline(admin.TabularInline):

@@ -3,12 +3,20 @@ from django.utils import timezone
 import markdown as md
 import bleach
 
-class Country(models.Model):
-    name = models.CharField(max_length=100)          # 표시용 국가명 (예: Japan)
-    slug = models.SlugField(unique=True)             # URL/조회용 (예: japan)
-    short_description = models.CharField(max_length=300, blank=True)
 
-    # (선택) 국기/대표 이미지: 나중에 S3/Cloudinary 붙이면 그대로 사용 가능
+class Country(models.Model):
+    # ✅ 표시용(템플릿에서 그대로 쓰던 필드)
+    name = models.CharField(max_length=100)          # 예: 대한민국(Korea)
+    slug = models.SlugField(unique=True)             # 예: korea / japan
+
+    # ✅ 자동 시딩/매핑 안정용
+    iso_a2 = models.CharField(max_length=2, blank=True, null=True, db_index=True)   # KR
+    iso_a3 = models.CharField(max_length=3, blank=True, null=True, unique=True)     # KOR (unique 추천)
+    name_ko = models.CharField(max_length=100, blank=True, default="")              # 대한민국
+    name_en = models.CharField(max_length=100, blank=True, default="")              # Korea
+    aliases = models.TextField(blank=True, default="")                               # South Korea, Republic of Korea ...
+
+    short_description = models.CharField(max_length=300, blank=True)
     flag_image = models.ImageField(upload_to="flags/", blank=True, null=True)
 
     class Meta:
@@ -34,7 +42,6 @@ class Post(models.Model):
         blank=True,
         help_text="이미지 삽입: [[img:123]] (Post Images의 ID 사용). 코드블럭(```) 안에서는 치환되지 않습니다."
     )
-    
 
     cover_image = models.ImageField(upload_to="posts/", blank=True, null=True)
 
@@ -48,11 +55,8 @@ class Post(models.Model):
 
     def __str__(self):
         return f"[{self.category}] {self.title}"
-    
+
     def rendered_content(self) -> str:
-        """
-        content(마크다운)을 HTML로 변환하고, 허용 태그/속성만 남기도록 sanitize.
-        """
         raw_html = md.markdown(
             self.content or "",
             extensions=["fenced_code", "tables", "nl2br"],
@@ -85,12 +89,9 @@ class Post(models.Model):
             strip=True,
         )
 
-        # 링크 보안 처리(새 탭 열기 같은 건 템플릿/프론트에서 컨트롤해도 OK)
         cleaned = cleaned.replace("<a ", '<a rel="nofollow noopener" target="_blank" ')
         return cleaned
 
-# apps/blog/models.py
-from django.db import models
 
 class PostImage(models.Model):
     post = models.ForeignKey(
@@ -100,15 +101,11 @@ class PostImage(models.Model):
     )
     image = models.ImageField(upload_to="post_images/")
     caption = models.CharField(max_length=200, blank=True)
-
-    # ✅ 갤러리/관리자에서 순서 제어용
     order = models.PositiveIntegerField(default=0)
-
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["order", "id"]  # ✅ 기본 정렬
+        ordering = ["order", "id"]
 
     def __str__(self):
         return f"{self.post_id} - {self.order}"
-

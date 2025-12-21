@@ -1,302 +1,144 @@
-# apps/blog/views.py
-from __future__ import annotations
-
-import re
-from typing import Dict, List, Set, Tuple
-
+from django.shortcuts import render
 from django.core.paginator import Paginator
-from django.shortcuts import get_object_or_404, render
-from django.utils.html import escape
-from django.utils.safestring import mark_safe
+from django.http import HttpResponse
+from django.db.models import Q
+from django.core.exceptions import FieldError
 
 from .models import Country, Post, PostImage
 
-try:
-    from cloudinary import CloudinaryImage
-except Exception:
-    CloudinaryImage = None
 
-
-# ---------------------------
-# Category helpers
-# ---------------------------
-
-CATEGORY_MAP = {
-    "history": "HISTORY",
-    "culture": "CULTURE",
-    "travel": "TRAVEL",
-    "my-log": "MY_LOG",
-}
-REVERSE_CATEGORY_MAP = {v: k for k, v in CATEGORY_MAP.items()}  # HISTORY -> history
-
-
-def normalize_category(value: str | None) -> str | None:
-    if not value:
-        return None
-    return CATEGORY_MAP.get(value, value)
-
-
-def category_to_slug(value: str | None) -> str | None:
-    if not value:
-        return None
-    return REVERSE_CATEGORY_MAP.get(value, value.lower())
-
-
-# ---------------------------
-# Markdown + [[img:id]] replacement (preserve code)
-# ---------------------------
-
-IMG_TOKEN_RE = re.compile(r"\[\[img:(\d+)(?:\|([^\]]+))?\]\]")
-
-FENCED_RE = re.compile(
-    r"(^```.*?$.*?^```[ \t]*$|^~~~.*?$.*?^~~~[ \t]*$)",
-    re.MULTILINE | re.DOTALL,
-)
-INLINE_CODE_RE = re.compile(r"(`+)(.+?)\1", re.DOTALL)
-
-
-def _parse_img_opts(opt_str: str) -> dict:
-    """
-    opt_str 예: 'w=480|h=320|crop=fill|caption="hello world"'
-    """
-    opts = {}
-    if not opt_str:
-        return opts
-
-    for part in opt_str.split("|"):
-        part = part.strip()
-        if not part:
-            continue
-        if "=" in part:
-            k, v = part.split("=", 1)
-            k = k.strip().lower()
-            v = v.strip()
-            if len(v) >= 2 and v[0] == v[-1] and v[0] in ("'", '"'):
-                v = v[1:-1]
-            opts[k] = v
-        else:
-            opts[part.lower()] = "1"
-    return opts
-
-
-def _cloudinary_transformed_url(image_field, w=None, h=None, crop=None) -> str:
-    if not image_field:
-        return ""
-    fallback = getattr(image_field, "url", "")
-
-    public_id = getattr(image_field, "public_id", None)
-    if not public_id or CloudinaryImage is None:
-        return fallback
-
-    t = ["q_auto", "f_auto"]
-    if w:
-        t.append(f"w_{w}")
-    if h:
-        t.append(f"h_{h}")
-    if crop:
-        t.append(f"c_{crop}")
-    else:
-        t.append("c_limit")
-
-    try:
-        return CloudinaryImage(public_id).build_url(transformation=",".join(t))
-    except Exception:
-        return fallback
-
-
-def _render_img_html(img_obj: PostImage, opts: dict) -> str:
-    w = opts.get("w")
-    h = opts.get("h")
-    crop = opts.get("crop")
-
-    w_int = int(w) if (w and w.isdigit()) else None
-    h_int = int(h) if (h and h.isdigit()) else None
-
-    caption = opts.get("caption")
-    if caption is None:
-        caption = img_obj.caption or ""
-
-    alt = opts.get("alt")
-    if alt is None:
-        alt = caption or ""
-
-    show_caption = bool(caption)
-
-    src = _cloudinary_transformed_url(img_obj.image, w=w_int, h=h_int, crop=crop)
-
-    esc_alt = escape(alt)
-    esc_cap = escape(caption)
-
-    html = [
-        '<figure class="md-img">',
-        f'<img class="md-img__img" src="{src}" alt="{esc_alt}" loading="lazy" />',
+def get_tabs():
+    # key, label, url slug
+    return [
+        ("TRAVEL", "Travel", "travel"),
+        ("HISTORY", "History", "history"),
+        ("CULTURE", "Culture", "culture"),
+        ("MY_LOG", "My Log", "my-log"),
     ]
-    if show_caption:
-        html.append(f'<figcaption class="hint md-img__cap">{esc_cap}</figcaption>')
-    html.append("</figure>")
-    return "".join(html)
 
 
-
-def replace_img_tokens_preserving_code(md_text: str, images_by_id: Dict[int, PostImage]) -> Tuple[str, Set[int]]:
-    used_ids: Set[int] = set()
-
-    def _replace_tokens(text: str) -> str:
-        def _sub(m: re.Match) -> str:
-            img_id = int(m.group(1))
-            opt_str = m.group(2) or ""
-            img = images_by_id.get(img_id)
-            if not img:
-                return m.group(0)
-            opts = _parse_img_opts(opt_str)
-            used_ids.add(img_id)
-            return _render_img_html(img, opts)
-
-        return IMG_TOKEN_RE.sub(_sub, text)
-
-    def replace_in_plain_text(plain: str) -> str:
-        # inline code(`...`) 구간 보호
-        out: List[str] = []
-        last = 0
-        for m in INLINE_CODE_RE.finditer(plain):
-            out.append(_replace_tokens(plain[last:m.start()]))
-            out.append(m.group(0))  # inline code는 그대로
-            last = m.end()
-        out.append(_replace_tokens(plain[last:]))
-        return "".join(out)
-
-    # fenced code block 보호
-    result: List[str] = []
-    last = 0
-    for m in FENCED_RE.finditer(md_text or ""):
-        result.append(replace_in_plain_text((md_text or "")[last:m.start()]))
-        result.append(m.group(0))  # fenced code block은 그대로
-        last = m.end()
-    result.append(replace_in_plain_text((md_text or "")[last:]))
-
-    return "".join(result), used_ids
-
-
-def render_markdown(md_text: str) -> str:
+def resolve_selected_category(category_slug: str | None):
     """
-    Markdown -> HTML (python-markdown)
+    URL slug(travel/history/...) -> Post.Category value
     """
-    md_text = md_text or ""
+    mapping = {
+        "travel": Post.Category.TRAVEL,
+        "history": Post.Category.HISTORY,
+        "culture": Post.Category.CULTURE,
+        "my-log": Post.Category.MY_LOG,
+    }
+    if not category_slug:
+        return Post.Category.TRAVEL, "travel"
+    cat = mapping.get(category_slug, Post.Category.TRAVEL)
+    inv = {v: k for k, v in mapping.items()}
+    return cat, inv.get(cat, "travel")
+
+
+def is_htmx(request):
+    return request.headers.get("HX-Request") == "true" or request.META.get("HTTP_HX_REQUEST") == "true"
+
+
+def home(request, country_slug=None, category_slug=None, post_slug=None, **kwargs):
+    """
+    ✅ 중요: URLconf가 country_slug 같은 키워드 인자를 넘겨도 TypeError 안 나게 **kwargs로 흡수.
+    (예: path("<slug:country_slug>/", views.home) 형태)
+    """
+    # 혹시 URL에서 다른 이름(slug 등)으로 들어오면 보정
+    if country_slug is None:
+        country_slug = kwargs.get("slug") or kwargs.get("country")
+    if category_slug is None:
+        category_slug = kwargs.get("cat") or kwargs.get("category")
+    if post_slug is None:
+        post_slug = kwargs.get("post") or kwargs.get("postSlug")
+
+    # LEFT list
+    countries_qs = Country.objects.all()
+
+    # globe.js로 내려줄 데이터(매칭 강화를 위해 aliases/iso 포함)
     try:
-        import markdown as md
-    except Exception:
-        # markdown 패키지 없으면 안전하게 escape 처리
-        return mark_safe("<p>" + escape(md_text).replace("\n", "<br>") + "</p>")
-
-    html = md.markdown(
-        md_text,
-        extensions=["fenced_code", "codehilite", "tables", "nl2br"],
-        extension_configs={
-            "codehilite": {"guess_lang": False, "noclasses": False}
-        },
-        output_format="html5",
-    )
-    return html
-
-
-# ---------------------------
-# View
-# ---------------------------
-
-def home(request, country_slug=None, category_slug=None, post_slug=None):
-    countries = Country.objects.all()
-
-    country = country_slug or request.GET.get("country")
-    category_raw = category_slug or request.GET.get("category")
-    post = post_slug or request.GET.get("post")
+        countries_for_globe = list(
+            countries_qs.values("name", "slug", "aliases", "iso_a2", "iso_a3")
+        )
+    except FieldError:
+        # (혹시 아직 필드가 없다면 최소 동작)
+        countries_for_globe = list(countries_qs.values("name", "slug"))
 
     selected_country = None
-    selected_post = None
-    posts = Post.objects.none()
-    page_obj = None
+    if country_slug:
+        try:
+            selected_country = countries_qs.get(slug=country_slug)
+        except Country.DoesNotExist:
+            selected_country = None
+
+    # category
+    selected_category, selected_category_slug = resolve_selected_category(category_slug)
+
+    # posts query
+    posts_qs = Post.objects.filter(is_published=True)
+    if selected_country:
+        posts_qs = posts_qs.filter(country=selected_country)
+    posts_qs = posts_qs.filter(category=selected_category)
+
     q = (request.GET.get("q") or "").strip()
+    if q:
+        posts_qs = posts_qs.filter(Q(title__icontains=q) | Q(content__icontains=q))
 
-    category = normalize_category(category_raw)
+    posts_qs = posts_qs.order_by("-published_at", "-created_at", "-id")
 
-    selected_post_html = None
-    gallery_images = []
+    # pagination
+    page = request.GET.get("page") or "1"
+    paginator = Paginator(posts_qs, 10)
+    page_obj = paginator.get_page(page)
+    posts = page_obj.object_list
 
-    if country:
-        selected_country = get_object_or_404(Country, slug=country)
+    selected_post = None
+    selected_post_html = ""
+    gallery_images = None
 
-        valid_categories = set(Post.Category.values)
-        if not category or category not in valid_categories:
-            category = Post.Category.HISTORY
-
-        qs = Post.objects.filter(
-            country=selected_country,
-            is_published=True,
-            category=category,
-        )
-
-        if q:
-            qs = qs.filter(title__icontains=q)
-
-        if post:
-            # 이미지 미리 가져오면 아래에서 추가 쿼리 줄어듦
-            selected_post = get_object_or_404(
-                Post.objects.prefetch_related("images"),
-                slug=post,
-                is_published=True,
+    if post_slug and selected_country:
+        try:
+            selected_post = Post.objects.get(
                 country=selected_country,
-                category=category,
+                category=selected_category,
+                slug=post_slug,
+                is_published=True,
             )
+            selected_post_html = selected_post.rendered_content()
+            gallery_images = PostImage.objects.filter(post=selected_post).order_by("order", "id")
+        except Post.DoesNotExist:
+            selected_post = None
 
-        page_size = 10
-        page_param = request.GET.get("page")
-        page_number = page_param or 1
-
-        if selected_post and not page_param:
-            ids = list(qs.values_list("id", flat=True))
-            try:
-                idx = ids.index(selected_post.id)
-                page_number = (idx // page_size) + 1
-            except ValueError:
-                page_number = 1
-
-        paginator = Paginator(qs, page_size)
-        page_obj = paginator.get_page(page_number)
-        posts = page_obj.object_list
-
-        if selected_post:
-            imgs = list(selected_post.images.all().order_by("order", "id"))
-            images_by_id = {img.id: img for img in imgs}
-
-            md_with_imgs, used_ids = replace_img_tokens_preserving_code(selected_post.content or "", images_by_id)
-            selected_post_html = render_markdown(md_with_imgs)
-
-            gallery_images = [img for img in imgs if img.id not in used_ids]
-
-    tabs = [(k, l, category_to_slug(k)) for k, l in Post.Category.choices]
-    selected_category_slug = category_to_slug(category)
-
-    category_path = (
-        f"/{selected_country.slug}/{selected_category_slug}/"
-        if selected_country and selected_category_slug
-        else "/"
-    )
+    # category_path (board 내부 링크들이 사용하는 base path)
+    if selected_country:
+        category_path = f"/{selected_country.slug}/{selected_category_slug}/"
+    else:
+        category_path = "/"
 
     context = {
-        "countries": countries,
+        "countries": countries_qs,
+        "countries_for_globe": countries_for_globe,
+
         "selected_country": selected_country,
-        "selected_category": category,
+        "selected_category": selected_category,
         "selected_category_slug": selected_category_slug,
+
+        "tabs": get_tabs(),
         "posts": posts,
-        "selected_post": selected_post,
-        "categories": Post.Category,
-        "tabs": tabs,
         "page_obj": page_obj,
-        "category_path": category_path,
-        "q": q,
+
+        "selected_post": selected_post,
         "selected_post_html": selected_post_html,
         "gallery_images": gallery_images,
+
+        "q": q,
+        "category_path": category_path,
     }
 
-    if request.headers.get("HX-Request") == "true":
+    # slug가 틀린 경우 HTMX면 보드를 "빈 내용으로 교체"하지 않도록 204 처리
+    if is_htmx(request) and country_slug and not selected_country:
+        return HttpResponse("", status=204)
+
+    if is_htmx(request):
         return render(request, "blog/_board.html", context)
+
     return render(request, "blog/home.html", context)

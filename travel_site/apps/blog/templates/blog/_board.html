@@ -1,31 +1,37 @@
 {% load cld %}
 
 {% if selected_country %}
-  {# 읽기모드 판별용 마커 (JS에서 data-has-post='1' 체크) #}
+  {# 읽기모드 판별용 마커 #}
   <div data-has-post="{% if selected_post %}1{% else %}0{% endif %}" hidden></div>
 
   <div class="board-header">
-    <div>
-      <h2 style="margin:0 0 8px 0;">{{ selected_country.name }}</h2>
+      <div>
+        <h2 style="margin:0 0 8px 0; display:flex; align-items:center; gap:10px;">
+          {# 1) Cloudinary 국기 있으면 우선 표시 #}
+          {% if selected_country.flag_image %}
+            <img
+              src="{{ selected_country.flag_image.url|cld_transform:'w_48,h_32,c_fill,q_auto,f_auto' }}"
+              alt=""
+              class="flag-img"
+              loading="lazy"
+              width="48"
+              height="32"
+              style="margin:0;"
+            />
+          {% elif selected_country.iso_a2 %}
+            {# 2) 없으면 ISO 기반 국기(span) fallback #}
+            <span class="fi fi-{{ selected_country.iso_a2|lower }}" aria-label="{{ selected_country.name }}"></span>
+          {% endif %}
+    
+          <span>{{ selected_country.name }}</span>
+        </h2>
+      </div>
+      <a class="close-btn js-close" href="/">닫기</a>
     </div>
-    {# 닫기 버튼은 JS에서 .js-close만 잡도록 #}
-    <a class="close-btn js-close" href="/">닫기</a>
-  </div>
 
-  {% if selected_country.flag_image %}
-    <img
-      src="{{ selected_country.flag_image.url|cld_transform:'w_96,h_64,c_fill,q_auto,f_auto' }}"
-      alt=""
-      class="flag-img"
-      loading="lazy"
-      width="96"
-      height="64"
-    />
-  {% endif %}
 
   <div class="hint">{{ selected_country.short_description }}</div>
 
-  {# 탭 #}
   <div class="tabs">
     {% for key,label,cat_slug in tabs %}
       <a class="{% if selected_category == key %}active{% endif %}"
@@ -40,7 +46,6 @@
     {% endfor %}
   </div>
 
-  {# 검색 #}
   <form class="search"
         action="{{ category_path }}" method="get"
         hx-get="{{ category_path }}"
@@ -55,7 +60,7 @@
   </form>
 
   {% if q %}
-    <div class="mt-8">
+    <div style="margin-top:8px;">
       <a class="hint"
          href="{{ category_path }}?page=1"
          hx-get="{{ category_path }}?page=1"
@@ -66,7 +71,6 @@
     </div>
   {% endif %}
 
-  {# 목차 #}
   <div class="toc">
     {% for p in posts %}
       <a class="toc-link {% if selected_post and selected_post.slug == p.slug %}active{% endif %}"
@@ -87,7 +91,7 @@
     {% endfor %}
   </div>
 
-  {# 페이저: 읽기모드면 "목록" + (필요 시) 이전/다음, 목록모드면 (필요 시) 이전/다음 #}
+  {# pager #}
   {% if selected_post %}
     <div class="pager">
       <a class="close-btn pager-back"
@@ -103,10 +107,8 @@
           {% if page_obj.has_previous %}
             <a href="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
                hx-get="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
-               hx-target="#board"
-               hx-swap="innerHTML"
-               hx-indicator=".htmx-indicator"
-               hx-push-url="true">이전</a>
+               hx-target="#board" hx-swap="innerHTML"
+               hx-indicator=".htmx-indicator" hx-push-url="true">이전</a>
           {% else %}
             <span class="hint">이전</span>
           {% endif %}
@@ -116,10 +118,8 @@
           {% if page_obj.has_next %}
             <a href="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
                hx-get="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
-               hx-target="#board"
-               hx-swap="innerHTML"
-               hx-indicator=".htmx-indicator"
-               hx-push-url="true">다음</a>
+               hx-target="#board" hx-swap="innerHTML"
+               hx-indicator=".htmx-indicator" hx-push-url="true">다음</a>
           {% else %}
             <span class="hint">다음</span>
           {% endif %}
@@ -133,10 +133,8 @@
         {% if page_obj.has_previous %}
           <a href="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
              hx-get="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
-             hx-target="#board"
-             hx-swap="innerHTML"
-             hx-indicator=".htmx-indicator"
-             hx-push-url="true">이전</a>
+             hx-target="#board" hx-swap="innerHTML"
+             hx-indicator=".htmx-indicator" hx-push-url="true">이전</a>
         {% else %}
           <span class="hint">이전</span>
         {% endif %}
@@ -146,10 +144,8 @@
         {% if page_obj.has_next %}
           <a href="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
              hx-get="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
-             hx-target="#board"
-             hx-swap="innerHTML"
-             hx-indicator=".htmx-indicator"
-             hx-push-url="true">다음</a>
+             hx-target="#board" hx-swap="innerHTML"
+             hx-indicator=".htmx-indicator" hx-push-url="true">다음</a>
         {% else %}
           <span class="hint">다음</span>
         {% endif %}
@@ -157,7 +153,6 @@
     </div>
   {% endif %}
 
-  {# 본문 #}
   {% if selected_post %}
     <div class="content" id="postContent">
       <h3 style="margin:0 0 8px 0;">{{ selected_post.title }}</h3>
@@ -171,14 +166,12 @@
         />
       {% endif %}
 
-      {# ✅ 본문: Markdown 렌더링 결과 사용 (없으면 linebreaks fallback) #}
       {% if selected_post_html %}
         {{ selected_post_html|safe }}
       {% else %}
         {{ selected_post.content|linebreaks }}
       {% endif %}
 
-      {# ✅ 본문 아래 갤러리(본문에 삽입된 것 제외한 나머지만) #}
       {% if gallery_images %}
         <div class="gallery">
           {% for img in gallery_images %}
@@ -187,9 +180,10 @@
                 src="{{ img.image.url|cld_transform:'w_760,c_limit,q_auto,f_auto' }}"
                 alt="{{ img.caption|default_if_none:'' }}"
                 loading="lazy"
+                style="width:100%; border-radius:10px;"
               />
               {% if img.caption %}
-                <figcaption class="hint">{{ img.caption }}</figcaption>
+                <figcaption class="hint" style="margin-top:6px;">{{ img.caption }}</figcaption>
               {% endif %}
             </figure>
           {% endfor %}
@@ -197,8 +191,6 @@
       {% endif %}
     </div>
   {% else %}
-    <div class="hint mt-12">
-      목차에서 글 제목을 클릭하면 내용이 여기에 표시됩니다.
-    </div>
+    <div class="hint" style="margin-top:12px;">목차에서 글 제목을 클릭하면 내용이 여기에 표시됩니다.</div>
   {% endif %}
 {% endif %}
