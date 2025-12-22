@@ -3,7 +3,7 @@
 <head>
   {% load static %}
   <meta charset="utf-8" />
-  <title>Travel Atlas & Log</title>
+  <title>DongriGo: 아는 만큼 보이는 세계여행!</title>
 
   <link rel="stylesheet" href="{% static 'blog/css/pygments.css' %}">
   <link rel="stylesheet" href="{% static 'blog/css/codehilite_extra.css' %}">
@@ -16,10 +16,8 @@
     <!-- LEFT: Globe -->
     <div class="globe" id="globeArea" data-selected-country-slug="{% if selected_country %}{{ selected_country.slug }}{% endif %}">
       <div class="globe-shell">
-        <!-- WebGL/Canvas mount (단 1개) -->
         <div id="globeMount" class="globe-mount" aria-label="Interactive globe"></div>
 
-        <!-- UI overlay -->
         <div class="globe-overlay" aria-label="Globe controls">
           <div class="overlay-inner">
             <div class="globe-title">Dongri Go</div>
@@ -62,27 +60,21 @@
     <div class="htmx-indicator">불러오는 중...</div>
   </div>
 
-  <!-- ✅ vendor로 “한 번만” 로드 -->
+  <!-- ✅ vendor -->
   <script src="{% static 'blog/vendor/htmx/htmx.min.js' %}"></script>
   <script src="{% static 'blog/vendor/topojson/topojson.min.js' %}"></script>
   <script src="{% static 'blog/vendor/globe.gl/globe.gl.min.js' %}"></script>
 
   <!-- Django -> JS -->
   {{ countries_for_globe|json_script:"globeCountriesData" }}
-  
+
+  <!-- ✅ Django -> JS (assets): TopoJSON-only -->
   <script>
     window.TRAVEL_ATLAS_ASSETS = {
-      geojsonUrls: [
-        "{% static 'blog/data/countries.simplified.geojson' %}",
-        "{% static 'blog/data/countries.geojson' %}",
-      ],
       topojsonUrl: "{% static 'blog/vendor/world-atlas/countries-110m.json' %}",
-      earthTextureUrl: "{% static 'blog/vendor/three-globe/earth-dark.jpg' %}",
+      earthTextureUrl: "{% static 'blog/vendor/three-globe/earth-dark.jpg' %}"
     };
   </script>
-
-  <!-- Globe integration -->
-  <script src="{% static 'blog/js/globe.js' %}"></script>
 
   <script>
     (function () {
@@ -163,11 +155,22 @@
     })();
   </script>
 
+  <!-- Globe integration -->
+  <script src="{% static 'blog/js/globe.js' %}"></script>
+  <script src="{% static 'blog/js/lightbox.js' %}"></script>
+
+
   <div class="lightbox" id="lightbox" aria-hidden="true">
     <div>
+      <div class="lb-loading" aria-hidden="true">
+        <div class="lb-spinner"></div>
+      </div>
+
       <img id="lightboxImg" alt="" />
       <div class="hint" id="lightboxCap"></div>
     </div>
   </div>
+  
+  
 </body>
 </html>

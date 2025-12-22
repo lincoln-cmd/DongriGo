@@ -3,11 +3,12 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# --- (선택) .env 자동 로드 ---
+# --- .env 자동 로드 ---
 try:
     from dotenv import load_dotenv  # pip install python-dotenv
     load_dotenv(BASE_DIR / ".env")
 except Exception:
+    # python-dotenv 미설치/파일 없음이면 그냥 패스
     pass
 
 
@@ -27,27 +28,18 @@ def env_list(name: str, default=None):
     return [x.strip() for x in val.split(",") if x.strip()]
 
 
-# ✅ 개발 기본값: DEBUG=True (편의)
+# 개발 편의 기본값
 DEBUG = env_bool("DEBUG", True)
 
-# ✅ 개발 기본값 SECRET_KEY 허용 (배포에서는 env로 반드시 주입)
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-insecure-secret-key")
-
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", ["127.0.0.1", "localhost"])
+
+# (필요시)
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", [])
-
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-
-# HTTPS 환경에서만 켜도록(배포에서 env로 제어)
 SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", False)
 SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", False)
 CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", False)
-
-# 기본 보안 헤더
-SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_REFERRER_POLICY = "same-origin"
-X_FRAME_OPTIONS = "DENY"
-
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -57,6 +49,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
+    # Cloudinary 패키지는 설치돼 있어도 문제 없음
     "cloudinary_storage",
     "cloudinary",
 
@@ -93,7 +86,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -101,30 +93,57 @@ DATABASES = {
     }
 }
 
-
-AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
-]
-
-
 LANGUAGE_CODE = "ko-kr"
 TIME_ZONE = "Asia/Seoul"
 USE_I18N = True
 USE_TZ = True
 
-
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+if DEBUG:
+    WHITENOISE_AUTOREFRESH = True
+    WHITENOISE_USE_FINDERS = True
+
+
+def has_cloudinary_credentials() -> bool:
+    if os.environ.get("CLOUDINARY_URL"):
+        return True
+    if (
+        os.environ.get("CLOUDINARY_CLOUD_NAME")
+        and os.environ.get("CLOUDINARY_API_KEY")
+        and os.environ.get("CLOUDINARY_API_SECRET")
+    ):
+        return True
+    if os.environ.get("CLOUD_NAME") and os.environ.get("API_KEY") and os.environ.get("API_SECRET"):
+        return True
+    return False
+
+
+USE_CLOUDINARY = env_bool("USE_CLOUDINARY", False) and has_cloudinary_credentials()
+
+# cloudinary_storage가 기대하는 설정(환경변수에서 읽어 안전)
+CLOUDINARY_STORAGE = {
+    "CLOUD_NAME": os.environ.get("CLOUDINARY_CLOUD_NAME") or os.environ.get("CLOUD_NAME") or "",
+    "API_KEY": os.environ.get("CLOUDINARY_API_KEY") or os.environ.get("API_KEY") or "",
+    "API_SECRET": os.environ.get("CLOUDINARY_API_SECRET") or os.environ.get("API_SECRET") or "",
+}
+
 STORAGES = {
     "default": {
-        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage"
+        if USE_CLOUDINARY
+        else "django.core.files.storage.FileSystemStorage",
+        # FileSystemStorage일 때만 의미 있음
+        "OPTIONS": {"location": str(MEDIA_ROOT)} if not USE_CLOUDINARY else {},
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"
+        if DEBUG
+        else "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
 

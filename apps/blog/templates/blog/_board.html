@@ -160,7 +160,9 @@
       {% if selected_post.cover_image %}
         <img
           src="{{ selected_post.cover_image.url|cld_transform:'w_760,c_limit,q_auto,f_auto' }}"
-          alt=""
+          data-full="{{ selected_post.cover_image.url|cld_transform:'w_1600,c_limit,q_auto,f_auto' }}"
+          data-caption="{{ selected_post.title }}"
+          alt="{{ selected_post.title }}"
           class="cover-img"
           loading="lazy"
         />
@@ -178,10 +180,14 @@
             <figure class="gallery-item">
               <img
                 src="{{ img.image.url|cld_transform:'w_760,c_limit,q_auto,f_auto' }}"
+                data-full="{{ img.image.url|cld_transform:'w_1600,c_limit,q_auto,f_auto' }}"
+                data-caption="{{ img.caption|default_if_none:'' }}"
                 alt="{{ img.caption|default_if_none:'' }}"
                 loading="lazy"
                 style="width:100%; border-radius:10px;"
               />
+
+
               {% if img.caption %}
                 <figcaption class="hint" style="margin-top:6px;">{{ img.caption }}</figcaption>
               {% endif %}

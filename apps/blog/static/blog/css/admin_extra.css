@@ -1,0 +1,57 @@
+/* Admin live preview panel - theme friendly */
+
+.js-live-preview-wrap {
+  /* admin 테마 변수 우선(있으면), 없으면 기본값 */
+  background: var(--body-bg, transparent);
+  color: var(--body-fg, inherit);
+  border: 1px solid var(--border-color, #444);
+}
+
+.js-live-preview-wrap .js-live-preview-box {
+  background: var(--body-bg, transparent);
+  color: var(--body-fg, inherit);
+  border: 1px solid var(--border-color, #555);
+}
+
+.js-live-preview-wrap .js-live-preview-box a {
+  color: var(--link-fg, inherit);
+  text-decoration: underline;
+}
+
+/* 프리뷰 안 코드블럭이 너무 튀면 */
+.js-live-preview-wrap .js-live-preview-box pre,
+.js-live-preview-wrap .js-live-preview-box code {
+  background: rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 2px 6px;
+}
+
+/* 다크모드 강제 대응(브라우저가 다크 선호일 때) */
+@media (prefers-color-scheme: dark) {
+  .js-live-preview-wrap,
+  .js-live-preview-wrap .js-live-preview-box {
+    background: #111;
+    color: #eee;
+    border-color: rgba(255,255,255,0.18);
+  }
+
+  .js-live-preview-wrap .js-live-preview-box a {
+    color: #9ad1ff;
+  }
+
+  .js-live-preview-wrap .js-live-preview-box pre,
+  .js-live-preview-wrap .js-live-preview-box code {
+    background: rgba(255,255,255,0.08);
+  }
+}
+
+.js-md-toolbar .button {
+    padding: 6px 10px;
+    border-radius: 12px;
+}
+
+.js-md-wrap textarea {
+    width: 100%;
+}
+
+
