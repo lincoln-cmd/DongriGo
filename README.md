@@ -33,7 +33,7 @@
 - DB: SQLite(dev) / PostgreSQL(prod 권장)
 - Docker(보류), GitHub Actions(CI)
 
-## Post Exclusion Part
+## Post Exclusion Part (자세한 사항은 .gitignore 참조)
 - .env/SECRET_KEY가 들어간 파일
 - 대용량 파일 (GeoJSON 등의 100MB가 초과하는 파일은 .gitignore로 제외될 수 있음.)
 - collectstatic 결과물(staticfiles/): 배포 환경에서 다시 생성하는 게 표준이라 .gitignore로 제외
