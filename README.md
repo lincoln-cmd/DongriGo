@@ -11,7 +11,7 @@
   - Log: 개인 여행 기록(일기/후기형)
 - 탐색/정리(예정)
   - 국가/도시/태그 기반 분류
-  - 목록/상세 페이지, 검색(고도화)
+  - 목록/상세 페이지, 검색
   - 웹/앱 구현 및 댓글 기능 추가(고도화)
   - 자체 번역 AI 기능 탑재(고도화)
   - 카테고리 중 History, Culture 부분 내 이미지 캐릭터화 및 내용 설명 AI(고도화)
@@ -37,3 +37,4 @@
 - .env/SECRET_KEY가 들어간 파일
 - 대용량 파일 (GeoJSON 등의 100MB가 초과하는 파일은 .gitignore로 제외될 수 있음.)
 - collectstatic 결과물(staticfiles/): 배포 환경에서 다시 생성하는 게 표준이라 .gitignore로 제외
+- OS, editor extras: .swp, .swo, .vscode/*
