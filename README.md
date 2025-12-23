@@ -28,12 +28,12 @@
   - cover_image / gallery_images
 
 > ## Tech Stack
-- Python, Django
-- Storage: AWS S3 (or S3-compatible) **or** Cloudinary
-- DB: SQLite(dev) / PostgreSQL(prod 권장)
-- Docker(보류), GitHub Actions(CI)
-### Tech Stack (App)
-- Backend: Python 3.12, Django 6
+> - Python, Django
+> - Storage: AWS S3 (or S3-compatible) **or** Cloudinary
+> - DB: SQLite(dev) / PostgreSQL(prod 권장)
+> - Docker(보류), GitHub Actions(CI)
+> ### Tech Stack (App)
+> - Backend: Python 3.12, Django 6
 - Frontend: Django Templates + HTMX
 - 3D Globe: globe.gl (Three.js 기반), TopoJSON/GeoJSON
 - Static files: WhiteNoise
