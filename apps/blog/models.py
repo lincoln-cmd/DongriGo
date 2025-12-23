@@ -6,6 +6,7 @@ import markdown as md
 import bleach
 import re
 import html
+from django.db.models import Max
 
 
 class Country(models.Model):
@@ -260,3 +261,18 @@ class PostImage(models.Model):
     def __str__(self):
         cap = (self.caption or "").strip()
         return f"{self.post_id} - {self.order}" + (f" ({cap})" if cap else "")
+
+    def save(self, *args, **kwargs):
+        """
+        신규 이미지 생성 시 order가 0이면 자동으로 '맨 뒤'에 배치.
+        - 이미 order를 수동 지정한 경우엔 그대로 존중
+        - 기존 레코드 수정 시엔 건드리지 않음
+        """
+        if self.pk is None and (self.order is None or self.order == 0):
+            max_order = (
+                PostImage.objects.filter(post=self.post)
+                .aggregate(m=Max("order"))
+                .get("m")
+            )
+            self.order = (max_order or 0) + 10  # 10 단위로 띄워두면 중간 삽입이 편함
+        super().save(*args, **kwargs)

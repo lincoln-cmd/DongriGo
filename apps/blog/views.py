@@ -5,14 +5,14 @@ import re
 from django.shortcuts import render
 from django.core.paginator import Paginator
 from django.http import HttpResponse
-from django.db.models import Q
+from django.db.models import Q, Prefetch
 from django.core.exceptions import FieldError
 
 # ✅ admin live preview용
 from django.views.decorators.http import require_POST
 from django.contrib.admin.views.decorators import staff_member_required
 
-from .models import Country, Post
+from .models import Country, Post, PostImage
 
 
 def get_tabs():
@@ -82,7 +82,13 @@ def admin_live_preview(request):
     obj = None
     if post_id.isdigit():
         try:
-            obj = Post.objects.prefetch_related("images").get(pk=int(post_id))
+            obj = (
+                Post.objects
+                .prefetch_related(
+                    Prefetch("images", queryset=PostImage.objects.order_by("order", "id"))
+                )
+                .get(pk=int(post_id))
+            )
         except Post.DoesNotExist:
             obj = None
 
@@ -164,7 +170,9 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
         try:
             selected_post = (
                 Post.objects
-                .prefetch_related("images")
+                .prefetch_related(
+                    Prefetch("images", queryset=PostImage.objects.order_by("order", "id"))
+                )
                 .get(
                     country=selected_country,
                     category=selected_category,
@@ -182,7 +190,12 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
             else:
                 used_ids = _extract_used_image_ids_from_content(selected_post.content)
 
-            gallery_images = selected_post.images.exclude(id__in=used_ids)
+            # ✅ 갤러리도 order 기준으로 고정
+            gallery_images = (
+                selected_post.images
+                .exclude(id__in=used_ids)
+                .order_by("order", "id")
+            )
 
         except Post.DoesNotExist:
             selected_post = None

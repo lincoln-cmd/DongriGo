@@ -1,9 +1,11 @@
 from django.contrib import admin
+from django.db.models import Count
 from django.utils.html import format_html
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 
 from .models import Country, Post, PostImage
+import re
 
 
 @admin.register(Country)
@@ -25,10 +27,18 @@ class CountryAdmin(admin.ModelAdmin):
     ordering = ("name",)
     list_per_page = 50
 
+    # ✅ Country 전용 actions 추가 (PostAdmin.actions와는 별개)
+    actions = ("action_normalize_country_fields", "action_autofill_aliases")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # ✅ posts_count N+1 방지
+        return qs.annotate(posts_total=Count("posts", distinct=True))
+
     def posts_count(self, obj: Country):
-        # 주의: admin_order_field는 annotation 없으면 잘못 동작할 수 있어 생략
-        return obj.posts.count()
+        return getattr(obj, "posts_total", 0)
     posts_count.short_description = "Posts"
+    posts_count.admin_order_field = "posts_total"
 
     def view_on_site_link(self, obj: Country):
         return format_html(
@@ -48,6 +58,83 @@ class CountryAdmin(admin.ModelAdmin):
         except Exception:
             return "-"
     flag_preview.short_description = "Flag"
+
+    # -------------------------
+    # ✅ actions 구현
+    # -------------------------
+    @admin.action(description="선택 국가: ISO/slug/name 공백 정규화")
+    def action_normalize_country_fields(self, request, queryset):
+        updated = 0
+        for c in queryset:
+            changed = False
+
+            # iso 정규화(대문자 + 공백 제거)
+            if getattr(c, "iso_a2", None):
+                v = (c.iso_a2 or "").strip().upper()
+                if c.iso_a2 != v:
+                    c.iso_a2 = v
+                    changed = True
+
+            if getattr(c, "iso_a3", None):
+                v = (c.iso_a3 or "").strip().upper()
+                if c.iso_a3 != v:
+                    c.iso_a3 = v
+                    changed = True
+
+            # slug 공백 제거
+            if getattr(c, "slug", None):
+                v = (c.slug or "").strip()
+                if c.slug != v:
+                    c.slug = v
+                    changed = True
+
+            # name 공백 정리(연속 공백 -> 1개)
+            if getattr(c, "name", None):
+                v = re.sub(r"\s+", " ", (c.name or "")).strip()
+                if c.name != v:
+                    c.name = v
+                    changed = True
+
+            if changed:
+                c.save()
+                updated += 1
+
+        self.message_user(request, f"{updated}개 국가를 정규화했습니다.")
+
+    @admin.action(description="선택 국가: aliases 자동 보강(name/name_en/괄호영문)")
+    def action_autofill_aliases(self, request, queryset):
+        updated = 0
+
+        def extract_paren_en(display_name: str) -> str:
+            m = re.search(r"\(([^)]+)\)", display_name or "")
+            return (m.group(1).strip() if m else "")
+
+        def split_aliases(s: str) -> list[str]:
+            if not s:
+                return []
+            parts = re.split(r"[,;|]", s)
+            return [p.strip() for p in parts if p.strip()]
+
+        for c in queryset:
+            before = (getattr(c, "aliases", "") or "").strip()
+            items = set(split_aliases(before))
+
+            nm = (getattr(c, "name", "") or "").strip()
+            nm_en = (getattr(c, "name_en", "") or "").strip()
+            paren = extract_paren_en(nm)
+
+            for v in (nm, nm_en, paren):
+                v = (v or "").strip()
+                if v and v not in items:
+                    items.add(v)
+
+            after = ", ".join(sorted(items))
+            if after != before:
+                c.aliases = after
+                c.save(update_fields=["aliases"])
+                updated += 1
+
+        self.message_user(request, f"{updated}개 국가의 aliases를 보강했습니다.")
 
 
 class PostImageInline(admin.TabularInline):
@@ -91,8 +178,11 @@ class PostImageInline(admin.TabularInline):
 
 @admin.register(Post)
 class PostAdmin(admin.ModelAdmin):
+    list_editable = ("is_published",)
+
     list_display = (
         "title",
+        "slug",
         "country",
         "category",
         "is_published",
@@ -102,8 +192,14 @@ class PostAdmin(admin.ModelAdmin):
         "cover_preview",
         "view_on_site_link",
     )
-    list_filter = ("country", "category", "is_published")
-    search_fields = ("title", "content", "slug")
+    list_filter = ("country", "category", "is_published", "published_at")
+    search_fields = (
+        "title",
+        "content",
+        "slug",
+        "country__name",
+        "country__slug",
+    )
     prepopulated_fields = {"slug": ("title",)}
     ordering = ("-published_at", "-created_at", "-id")
     date_hierarchy = "published_at"
@@ -113,6 +209,7 @@ class PostAdmin(admin.ModelAdmin):
     autocomplete_fields = ("country",)
     inlines = [PostImageInline]
 
+    # ✅ Post 전용 actions(발행/비공개) 유지
     actions = ("action_publish", "action_unpublish")
 
     fieldsets = (
@@ -127,11 +224,13 @@ class PostAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.prefetch_related("images")
+        # ✅ images_count N+1 방지
+        return qs.annotate(images_total=Count("images", distinct=True)).prefetch_related("images")
 
     def images_count(self, obj: Post):
-        return obj.images.count()
+        return getattr(obj, "images_total", 0)
     images_count.short_description = "Images"
+    images_count.admin_order_field = "images_total"
 
     def cover_preview(self, obj: Post):
         if not getattr(obj, "cover_image", None):
@@ -155,7 +254,7 @@ class PostAdmin(admin.ModelAdmin):
     def rendered_preview(self, obj: Post):
         if not obj or not obj.pk:
             return "저장 후 미리보기가 표시됩니다."
-        html = obj.rendered_content()  # bleach로 정제된 HTML 가정
+        html = obj.rendered_content()
         return format_html(
             '<div style="max-height:280px;overflow:auto;border:1px solid #ddd;padding:10px;border-radius:8px;">{}</div>',
             mark_safe(html),
@@ -180,12 +279,38 @@ class PostAdmin(admin.ModelAdmin):
         updated = queryset.update(is_published=False)
         self.message_user(request, f"{updated}개 글을 비공개 처리했습니다.")
 
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        # ✅ slug를 비워도 통과하도록(저장 시 model.save()에서 자동 생성)
+        if "slug" in form.base_fields:
+            form.base_fields["slug"].required = False
+        return form
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+
+        post = form.instance
+
+        imgs = list(post.images.all().order_by("order", "id"))
+        if not imgs:
+            return
+
+        changed = False
+        for idx, img in enumerate(imgs):
+            new_order = idx * 10
+            if img.order != new_order:
+                img.order = new_order
+                changed = True
+
+        if changed:
+            PostImage.objects.bulk_update(imgs, ["order"])
+
     class Media:
         css = {"all": ("blog/css/admin_extra.css",)}
         js = (
             "blog/js/admin_postimage_insert.js",
             "blog/js/admin_live_preview.js",
-            "blog/js/admin_markdown_toolbar.js",  # ✅ 추가
+            "blog/js/admin_markdown_toolbar.js",
         )
 
 
