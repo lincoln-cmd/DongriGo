@@ -242,7 +242,7 @@ fixture 파일이 UTF-8이 아닌 인코딩으로 생성된 케이스입니다.
 
 (**기반 안정화 → UX 개선 → 기능 확장 → 자동화/운영** 순으로 정리)
 
-### ✅ Phase 0 — Baseline (현재)
+### ✅ Phase 0 — Baseline (완료)
 - Django admin 기반 콘텐츠 작성/편집
 - 3D Globe 국가 클릭 → HTMX 보드 로드
 - 검색/탭 기반 탐색
