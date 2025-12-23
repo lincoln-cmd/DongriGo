@@ -5,7 +5,8 @@ DongriGo는 국가별 **역사·문화·여행 정보(가이드)**와 **개인 �
 이미지/첨부 파일은 **Cloudinary**에 저장합니다. *(민감한 키/토큰은 레포에 포함하지 않습니다.)*
 
 - 서비스: https://dongrigo.onrender.com  
-- Admin: https://dongrigo.onrender.com/admin  
+- Admin: https://dongrigo.onrender.com/admin
+- Notion: https://www.notion.so/Django-DongriGo-2d2c2fb07df980c6b238c7c53d54ae59
 
 ---
 
