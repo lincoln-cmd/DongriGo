@@ -1,15 +1,15 @@
 import os
 from pathlib import Path
+
 import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# --- .env 자동 로드 ---
+# --- .env 자동 로드 (로컬용; Render에서는 환경변수로 주입) ---
 try:
     from dotenv import load_dotenv  # pip install python-dotenv
     load_dotenv(BASE_DIR / ".env")
 except Exception:
-    # python-dotenv 미설치/파일 없음이면 그냥 패스
     pass
 
 
@@ -29,19 +29,45 @@ def env_list(name: str, default=None):
     return [x.strip() for x in val.split(",") if x.strip()]
 
 
-# 개발 편의 기본값
+# -------------------------
+# Core
+# -------------------------
 DEBUG = env_bool("DEBUG", True)
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-insecure-secret-key")
+
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", ["127.0.0.1", "localhost"])
-
-# (필요시)
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", [])
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", False)
-SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", False)
-CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", False)
 
+# Render: 외부 호스트 자동 반영 (ALLOWED_HOSTS/CSRF 누락 방지)
+RENDER_EXTERNAL_HOSTNAME = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+if RENDER_EXTERNAL_HOSTNAME:
+    if RENDER_EXTERNAL_HOSTNAME not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+    origin = f"https://{RENDER_EXTERNAL_HOSTNAME}"
+    if origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(origin)
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# 배포 기본값은 안전하게(단, env로 덮어쓸 수 있게)
+SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", default=(not DEBUG))
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", default=(not DEBUG))
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", default=(not DEBUG))
+
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
+
+# (선택) HSTS: 실제 운영 도메인 확정 후 켜는 걸 권장
+SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "0"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", False)
+SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", False)
+
+
+# -------------------------
+# Apps / Middleware
+# -------------------------
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -87,6 +113,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
+
+# -------------------------
+# Database
+# -------------------------
 DATABASES = {
     "default": dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
@@ -94,11 +124,19 @@ DATABASES = {
     )
 }
 
+
+# -------------------------
+# I18N / TZ
+# -------------------------
 LANGUAGE_CODE = "ko-kr"
 TIME_ZONE = "Asia/Seoul"
 USE_I18N = True
 USE_TZ = True
 
+
+# -------------------------
+# Static / Media
+# -------------------------
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
@@ -111,22 +149,26 @@ if DEBUG:
 
 
 def has_cloudinary_credentials() -> bool:
+    # 가장 권장: CLOUDINARY_URL 하나로 처리
     if os.environ.get("CLOUDINARY_URL"):
         return True
+
+    # 혹시 URL 대신 키로 넣는 경우도 지원
     if (
         os.environ.get("CLOUDINARY_CLOUD_NAME")
         and os.environ.get("CLOUDINARY_API_KEY")
         and os.environ.get("CLOUDINARY_API_SECRET")
     ):
         return True
+
     if os.environ.get("CLOUD_NAME") and os.environ.get("API_KEY") and os.environ.get("API_SECRET"):
         return True
+
     return False
 
 
 USE_CLOUDINARY = env_bool("USE_CLOUDINARY", False) and has_cloudinary_credentials()
 
-# cloudinary_storage가 기대하는 설정(환경변수에서 읽어 안전)
 CLOUDINARY_STORAGE = {
     "CLOUD_NAME": os.environ.get("CLOUDINARY_CLOUD_NAME") or os.environ.get("CLOUD_NAME") or "",
     "API_KEY": os.environ.get("CLOUDINARY_API_KEY") or os.environ.get("API_KEY") or "",
@@ -138,7 +180,6 @@ STORAGES = {
         "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage"
         if USE_CLOUDINARY
         else "django.core.files.storage.FileSystemStorage",
-        # FileSystemStorage일 때만 의미 있음
         "OPTIONS": {"location": str(MEDIA_ROOT)} if not USE_CLOUDINARY else {},
     },
     "staticfiles": {
