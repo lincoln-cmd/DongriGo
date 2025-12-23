@@ -95,7 +95,7 @@
   "fields": {
     "name": "Scarborough Reef",
     "slug": "-99",
-    "iso_a2": "-99",
+    "iso_a2": null,
     "iso_a3": "-99",
     "name_ko": "",
     "name_en": "Scarborough Reef",
@@ -2630,7 +2630,7 @@
   "fields": {
     "name": "Taiwan",
     "slug": "cn-tw",
-    "iso_a2": "CN-TW",
+    "iso_a2": "TW",
     "iso_a3": "TWN",
     "name_ko": "",
     "name_en": "Taiwan",
