@@ -34,17 +34,17 @@
 > - Docker(보류), GitHub Actions(CI)
 > ### Tech Stack (App)
 > - Backend: Python 3.12, Django 6
-- Frontend: Django Templates + HTMX
-- 3D Globe: globe.gl (Three.js 기반), TopoJSON/GeoJSON
-- Static files: WhiteNoise
-- Media (Images): Cloudinary + django-cloudinary-storage
-- Database (prod): PostgreSQL
-- Local dev: SQLite (옵션)
-### Deployment Stack
-- Hosting: Render Web Service (Starter)
-- DB: Render Postgres (Basic-256MB)
-- WSGI: gunicorn
-- CI/CD: GitHub → Render 자동 배포
+> - Frontend: Django Templates + HTMX
+> - 3D Globe: globe.gl (Three.js 기반), TopoJSON/GeoJSON
+> - Static files: WhiteNoise
+> - Media (Images): Cloudinary + django-cloudinary-storage
+> - Database (prod): PostgreSQL
+> - Local dev: SQLite (옵션)
+> ### Deployment Stack
+> - Hosting: Render Web Service (Starter)
+> - DB: Render Postgres (Basic-256MB)
+> - WSGI: gunicorn
+> - CI/CD: GitHub → Render 자동 배포
 
 ## Post Exclusion Part (자세한 사항은 .gitignore 참조)
 - .env/SECRET_KEY가 들어간 파일
