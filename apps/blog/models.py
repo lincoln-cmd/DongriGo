@@ -303,3 +303,19 @@ class PostImage(models.Model):
             )
             self.order = (max_order or 0) + 10  # 10 단위로 띄워두면 중간 삽입이 편함
         super().save(*args, **kwargs)
+
+class SeedMeta(models.Model):
+    """Seed(초기 데이터) 적용 이력을 1-row로 기록해 재시딩을 안전하게 만든다."""
+
+    name = models.CharField(max_length=50, unique=True, default="prod_seed")
+    fixture_path = models.CharField(max_length=300, blank=True, default="")
+    fixture_sha256 = models.CharField(max_length=64, blank=True, default="")
+    applied_at = models.DateTimeField(null=True, blank=True)
+    notes = models.JSONField(blank=True, default=dict)
+
+    class Meta:
+        verbose_name = "Seed Meta"
+        verbose_name_plural = "Seed Meta"
+
+    def __str__(self):
+        return f"{self.name} ({self.fixture_sha256[:8] if self.fixture_sha256 else 'no-hash'})"
