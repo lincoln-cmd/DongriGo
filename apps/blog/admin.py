@@ -1,15 +1,80 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.db.models import Count
 from django.utils.html import format_html
 from django.utils import timezone
 from django.utils.safestring import mark_safe
+from django import forms
+from django.core.exceptions import ValidationError
 
 from .models import Country, Post, PostImage
+try:
+    from .models import PostSlugHistory
+except Exception:
+    PostSlugHistory = None
+
 import re
+
+
+def _normalize_aliases(raw: str) -> str:
+    """aliases를 'comma+space' 포맷으로 정규화."""
+    if not raw:
+        return ""
+    parts = re.split(r"[,;|\n]+", raw)
+    items = [p.strip() for p in parts if p.strip()]
+    seen = set()
+    out = []
+    for it in items:
+        if it not in seen:
+            seen.add(it)
+            out.append(it)
+    return ", ".join(out)
+
+
+class CountryAdminForm(forms.ModelForm):
+    class Meta:
+        model = Country
+        fields = "__all__"
+
+    def clean_iso_a2(self):
+        v = (self.cleaned_data.get("iso_a2") or "").strip().upper()
+        if v == "":
+            return None
+        if len(v) != 2:
+            raise ValidationError("iso_a2는 2자리여야 합니다. (예: KR)")
+        return v
+
+    def clean_iso_a3(self):
+        v = (self.cleaned_data.get("iso_a3") or "").strip().upper()
+        if v == "":
+            return None
+        if len(v) != 3:
+            raise ValidationError("iso_a3는 3자리여야 합니다. (예: KOR)")
+        return v
+
+    def clean_aliases(self):
+        raw = self.cleaned_data.get("aliases") or ""
+        return _normalize_aliases(raw)
+
+
+class PostAdminForm(forms.ModelForm):
+    class Meta:
+        model = Post
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 모델 save에서 slug 자동 생성하므로 admin에서 빈 값 허용
+        if "slug" in self.fields:
+            self.fields["slug"].required = False
+
+    def clean_slug(self):
+        return (self.cleaned_data.get("slug") or "").strip()
 
 
 @admin.register(Country)
 class CountryAdmin(admin.ModelAdmin):
+    form = CountryAdminForm
+
     list_display = (
         "name",
         "slug",
@@ -17,6 +82,7 @@ class CountryAdmin(admin.ModelAdmin):
         "iso_a3",
         "name_ko",
         "name_en",
+        "data_warnings",
         "posts_count",
         "view_on_site_link",
         "flag_preview",
@@ -27,18 +93,42 @@ class CountryAdmin(admin.ModelAdmin):
     ordering = ("name",)
     list_per_page = 50
 
-    # ✅ Country 전용 actions 추가 (PostAdmin.actions와는 별개)
     actions = ("action_normalize_country_fields", "action_autofill_aliases")
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        # ✅ posts_count N+1 방지
         return qs.annotate(posts_total=Count("posts", distinct=True))
 
     def posts_count(self, obj: Country):
         return getattr(obj, "posts_total", 0)
     posts_count.short_description = "Posts"
     posts_count.admin_order_field = "posts_total"
+
+    def data_warnings(self, obj: Country):
+        """
+        ✅ Django 6.0 주의:
+        - format_html()는 args/kwargs 없이 호출하면 TypeError 발생
+        - 단순 HTML 리턴은 mark_safe() 사용
+        """
+        issues = []
+        if obj.iso_a2 and len(obj.iso_a2) != 2:
+            issues.append("iso_a2")
+        if obj.iso_a3 and len(obj.iso_a3) != 3:
+            issues.append("iso_a3")
+
+        raw = (getattr(obj, "aliases", "") or "").strip()
+        if raw and _normalize_aliases(raw) != raw:
+            issues.append("aliases")
+
+        if not issues:
+            return mark_safe('<span style="color:#2e7d32;">OK</span>')
+
+        return format_html(
+            '<span title="{}" style="color:#d32f2f;font-weight:700;">⚠ {}</span>',
+            ", ".join(issues),
+            len(issues),
+        )
+    data_warnings.short_description = "Check"
 
     def view_on_site_link(self, obj: Country):
         return format_html(
@@ -52,23 +142,40 @@ class CountryAdmin(admin.ModelAdmin):
             return "-"
         try:
             return format_html(
-                '<img src="{}" style="height:18px;border-radius:4px;" />',
+                '<img src="{}" style="height:22px;border-radius:4px;border:1px solid #ddd;" />',
                 obj.flag_image.url
             )
         except Exception:
             return "-"
     flag_preview.short_description = "Flag"
 
-    # -------------------------
-    # ✅ actions 구현
-    # -------------------------
+    def save_model(self, request, obj, form, change):
+        before_aliases = ""
+        before_iso_a2 = None
+        before_iso_a3 = None
+        if change and obj.pk:
+            old = Country.objects.filter(pk=obj.pk).values("aliases", "iso_a2", "iso_a3").first()
+            if old:
+                before_aliases = (old.get("aliases") or "").strip()
+                before_iso_a2 = old.get("iso_a2")
+                before_iso_a3 = old.get("iso_a3")
+
+        super().save_model(request, obj, form, change)
+
+        after_aliases = (getattr(obj, "aliases", "") or "").strip()
+        if after_aliases and before_aliases and after_aliases != before_aliases:
+            messages.info(request, f"[Country] aliases 정규화 적용: '{before_aliases}' → '{after_aliases}'")
+        if before_iso_a2 is not None and before_iso_a2 != obj.iso_a2:
+            messages.info(request, f"[Country] iso_a2 변경: {before_iso_a2} → {obj.iso_a2}")
+        if before_iso_a3 is not None and before_iso_a3 != obj.iso_a3:
+            messages.info(request, f"[Country] iso_a3 변경: {before_iso_a3} → {obj.iso_a3}")
+
     @admin.action(description="선택 국가: ISO/slug/name 공백 정규화")
     def action_normalize_country_fields(self, request, queryset):
         updated = 0
         for c in queryset:
             changed = False
 
-            # iso 정규화(대문자 + 공백 제거)
             if getattr(c, "iso_a2", None):
                 v = (c.iso_a2 or "").strip().upper()
                 if c.iso_a2 != v:
@@ -81,18 +188,17 @@ class CountryAdmin(admin.ModelAdmin):
                     c.iso_a3 = v
                     changed = True
 
-            # slug 공백 제거
+            for fld in ("name", "name_ko", "name_en"):
+                if hasattr(c, fld):
+                    v = (getattr(c, fld) or "").strip()
+                    if getattr(c, fld) != v:
+                        setattr(c, fld, v)
+                        changed = True
+
             if getattr(c, "slug", None):
                 v = (c.slug or "").strip()
                 if c.slug != v:
                     c.slug = v
-                    changed = True
-
-            # name 공백 정리(연속 공백 -> 1개)
-            if getattr(c, "name", None):
-                v = re.sub(r"\s+", " ", (c.name or "")).strip()
-                if c.name != v:
-                    c.name = v
                     changed = True
 
             if changed:
@@ -178,6 +284,8 @@ class PostImageInline(admin.TabularInline):
 
 @admin.register(Post)
 class PostAdmin(admin.ModelAdmin):
+    form = PostAdminForm
+
     list_editable = ("is_published",)
 
     list_display = (
@@ -188,28 +296,19 @@ class PostAdmin(admin.ModelAdmin):
         "is_published",
         "published_at",
         "updated_at",
+        "data_warnings",
         "images_count",
         "cover_preview",
         "view_on_site_link",
     )
-    list_filter = ("country", "category", "is_published", "published_at")
-    search_fields = (
-        "title",
-        "content",
-        "slug",
-        "country__name",
-        "country__slug",
-    )
-    prepopulated_fields = {"slug": ("title",)}
+    list_filter = ("country", "category", "is_published")
+    search_fields = ("title", "slug", "content")
     ordering = ("-published_at", "-created_at", "-id")
-    date_hierarchy = "published_at"
-    list_select_related = ("country",)
     list_per_page = 50
 
     autocomplete_fields = ("country",)
     inlines = [PostImageInline]
 
-    # ✅ Post 전용 actions(발행/비공개) 유지
     actions = ("action_publish", "action_unpublish")
 
     fieldsets = (
@@ -222,9 +321,29 @@ class PostAdmin(admin.ModelAdmin):
 
     readonly_fields = ("rendered_preview", "created_at", "updated_at")
 
+    def data_warnings(self, obj: Post):
+        issues = []
+        if obj.is_published and not obj.published_at:
+            issues.append("published_at")
+        if PostSlugHistory is not None:
+            try:
+                if obj.pk and PostSlugHistory.objects.filter(post=obj).exists():
+                    issues.append("slug_history")
+            except Exception:
+                pass
+
+        if not issues:
+            return mark_safe('<span style="color:#2e7d32;">OK</span>')
+
+        return format_html(
+            '<span title="{}" style="color:#d32f2f;font-weight:700;">⚠ {}</span>',
+            ", ".join(issues),
+            len(issues),
+        )
+    data_warnings.short_description = "Check"
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        # ✅ images_count N+1 방지
         return qs.annotate(images_total=Count("images", distinct=True)).prefetch_related("images")
 
     def images_count(self, obj: Post):
@@ -261,6 +380,28 @@ class PostAdmin(admin.ModelAdmin):
         )
     rendered_preview.short_description = "본문 미리보기"
 
+    def save_model(self, request, obj, form, change):
+        old_slug = None
+        old_country_id = None
+        old_category = None
+        if change and obj.pk:
+            old = Post.objects.filter(pk=obj.pk).values("slug", "country_id", "category").first()
+            if old:
+                old_slug = old.get("slug")
+                old_country_id = old.get("country_id")
+                old_category = old.get("category")
+
+        super().save_model(request, obj, form, change)
+
+        if not (form.cleaned_data.get("slug") or "").strip():
+            messages.info(request, "[Post] slug가 비어 있어 title 기반으로 자동 생성되었습니다.")
+
+        if old_slug and (old_slug != obj.slug or old_country_id != obj.country_id or old_category != obj.category):
+            messages.warning(
+                request,
+                f"[Post] URL 식별자가 변경되었습니다. 이전 링크({old_slug})는 301 리다이렉트로 보존됩니다."
+            )
+
     @admin.action(description="선택 글 발행(오늘 날짜 자동 설정)")
     def action_publish(self, request, queryset):
         today = timezone.localdate()
@@ -272,37 +413,30 @@ class PostAdmin(admin.ModelAdmin):
                 p.published_at = today
             p.save(update_fields=["is_published", "published_at", "updated_at"])
             updated += 1
-        self.message_user(request, f"{updated}개 글을 발행 처리했습니다.")
+        self.message_user(request, f"{updated}개 글을 발행했습니다.")
 
     @admin.action(description="선택 글 비공개")
     def action_unpublish(self, request, queryset):
         updated = queryset.update(is_published=False)
-        self.message_user(request, f"{updated}개 글을 비공개 처리했습니다.")
-
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        # ✅ slug를 비워도 통과하도록(저장 시 model.save()에서 자동 생성)
-        if "slug" in form.base_fields:
-            form.base_fields["slug"].required = False
-        return form
+        self.message_user(request, f"{updated}개 글을 비공개로 변경했습니다.")
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
 
-        post = form.instance
+        # ✅ order 자동 정렬 보정: 10 단위로 띄워서 저장(중복/0 방지)
+        obj: Post = form.instance
+        imgs = list(obj.images.order_by("order", "id"))
+        changed2 = False
+        current = 10
+        for im in imgs:
+            if im.order != current:
+                im.order = current
+                current += 10
+                changed2 = True
+            else:
+                current += 10
 
-        imgs = list(post.images.all().order_by("order", "id"))
-        if not imgs:
-            return
-
-        changed = False
-        for idx, img in enumerate(imgs):
-            new_order = idx * 10
-            if img.order != new_order:
-                img.order = new_order
-                changed = True
-
-        if changed:
+        if changed2:
             PostImage.objects.bulk_update(imgs, ["order"])
 
     class Media:
@@ -317,8 +451,8 @@ class PostAdmin(admin.ModelAdmin):
 @admin.register(PostImage)
 class PostImageAdmin(admin.ModelAdmin):
     list_display = ("id", "post", "order", "caption", "thumb", "created_at")
-    list_filter = ("created_at",)
-    search_fields = ("caption", "post__title", "post__slug", "post__country__name", "post__country__slug")
+    list_filter = ("post",)
+    search_fields = ("caption", "post__title")
     ordering = ("-created_at", "-id")
     autocomplete_fields = ("post",)
 
