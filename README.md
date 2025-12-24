@@ -193,7 +193,8 @@ python manage.py ops_check --json
 python manage.py seed_prod
 python manage.py check_integrity --fix --json
 ```
-If ```ops_check --strict``` fails:
+
+실패 시 가이드(```ops_check --strict```가 실패(ERROR)할 때)
 
 - Render Environment Variables: ALLOWED_HOSTS, DATABASE_URL, USE_CLOUDINARY, CLOUDINARY_URL(또는 CLOUDINARY_*)
 
