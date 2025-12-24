@@ -31,20 +31,47 @@ class Country(models.Model):
     def get_absolute_url(self):
         return f"/{self.slug}/"
 
-    def save(self, *args, **kwargs):
-        # ISO 값 정규화(있으면)
-        if self.iso_a2:
-            self.iso_a2 = self.iso_a2.strip().upper()
-        if self.iso_a3:
-            self.iso_a3 = self.iso_a3.strip().upper()
+    @staticmethod
+    def _unique_slugify(model_cls, base: str, *, instance_pk=None, max_len: int = 50) -> str:
+        """
+        base 로 slug 후보를 만들고, 충돌 시 -2, -3... 붙여서 유니크하게 만든다.
+        (필드 추가/마이그레이션 없이 admin/seed 실수 방지용)
+        """
+        base = (base or "").strip()
+        s = slugify(base)  # 기본은 ascii slug
+        if not s:
+            s = slugify(base, allow_unicode=True)
+        s = (s or "country")[:max_len]
 
-        # slug 비어있을 때만 자동 생성(기존 값 보존)
-        if not self.slug:
+        candidate = s
+        n = 2
+        while True:
+            qs = model_cls.objects.filter(slug=candidate)
+            if instance_pk is not None:
+                qs = qs.exclude(pk=instance_pk)
+            if not qs.exists():
+                return candidate
+
+            suffix = f"-{n}"
+            cut = max_len - len(suffix)
+            candidate = (s[:cut] if cut > 0 else s) + suffix
+            n += 1
+
+    def save(self, *args, **kwargs):
+        # ✅ ISO 값 정규화
+        # - admin/폼에서 빈 값이 ""로 들어오면(=falsy) 기존 로직이 작동하지 않아 ""가 DB에 저장될 수 있음
+        # - 특히 iso_a3(unique=True)는 ""가 여러 행에 저장되면 UNIQUE 충돌 위험이 커서 "" -> None 으로 정규화
+        if self.iso_a2 is not None:
+            v = (self.iso_a2 or "").strip().upper()
+            self.iso_a2 = v or None
+        if self.iso_a3 is not None:
+            v = (self.iso_a3 or "").strip().upper()
+            self.iso_a3 = v or None
+
+        # ✅ slug 비어있을 때만 자동 생성(기존 값 보존) + 유니크 보장
+        if not (self.slug or "").strip():
             base = (self.name_en or self.name or "").strip()
-            s = slugify(base)  # 기본은 ascii slug
-            if not s:
-                s = slugify(base, allow_unicode=True)
-            self.slug = (s or "country")[:50]
+            self.slug = self._unique_slugify(Country, base, instance_pk=self.pk, max_len=50)
 
         super().save(*args, **kwargs)
 

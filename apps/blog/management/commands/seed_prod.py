@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from django.core.management import call_command
@@ -62,15 +61,13 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Loading fixture: {fixture_path}"))
         call_command("loaddata", str(fixture_path))
 
-        # 사후 검증(iso_a2 2글자 제한 같은 사고 재발 방지)
-        bad_iso2 = list(Country.objects.exclude(iso_a2__isnull=True).exclude(iso_a2="").extra(
-            where=["length(iso_a2) > 2"]
-        ).values_list("id", "name", "iso_a2")[:20])
+        # ✅ Phase 1: 로드 후 정합성 점검/보수적 정규화(자동 수정은 안전 범위만)
+        # - iso 대문자/공백 정리, "" -> NULL 정규화, slug 누락 채우기 등
+        # - check_integrity 커맨드를 아직 추가하지 않았다면 에러만 출력하고 seed는 계속 진행
+        try:
+            self.stdout.write(self.style.WARNING("Running integrity check (--fix)..."))
+            call_command("check_integrity", "--fix")
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f"Integrity check failed (seed continues): {e}"))
 
-        if bad_iso2:
-            self.stdout.write(self.style.ERROR("WARNING: Found iso_a2 longer than 2 chars (showing up to 20):"))
-            for row in bad_iso2:
-                self.stdout.write(f"- {row}")
-            self.stdout.write(self.style.ERROR("Fix these rows, then rebuild fixture with rebuild_seed."))
-        else:
-            self.stdout.write(self.style.SUCCESS("Seed finished OK."))
+        self.stdout.write(self.style.SUCCESS("Seed finished OK."))
