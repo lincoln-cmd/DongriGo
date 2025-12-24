@@ -183,6 +183,26 @@ Windows 환경에서 인코딩 문제를 피하려면 UTF-8로 dump합니다.
 
 ---
 
+## Ops Runbook (Production Quick Checks)
+
+After deploy (Render Shell):
+
+```bash
+python manage.py migrate
+python manage.py ops_check --json
+python manage.py seed_prod
+python manage.py check_integrity --fix --json
+```
+If ```ops_check --strict``` fails:
+
+- Render Environment Variables: ALLOWED_HOSTS, DATABASE_URL, USE_CLOUDINARY, CLOUDINARY_URL(또는 CLOUDINARY_*)
+
+- Render Build Command가 ./build.sh인지 확인 (collectstatic 실행 포함)
+
+- 마이그레이션 적용 여부 확인: python manage.py migrate
+
+---
+
 ## Notes / Troubleshooting
 
 ### 1) Render에서 `ModuleNotFoundError: No module named 'app'`
