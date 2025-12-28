@@ -79,10 +79,19 @@ Globe integration (globe.gl) - TopoJSON only
   }
 
   // ✅ 보드 갱신(fetch + HX-Request)
+  // Phase2: 보드 "껍데기(#board)"는 고정, "내용(#boardContent)"만 갱신해야 함.
   let inflight = null;
   async function loadBoard(url) {
-    const board = document.getElementById('board');
-    if (!board) return;
+    const boardContent = document.getElementById('boardContent');
+    if (!boardContent) {
+      // 템플릿 구조가 다르면 안전하게 풀 페이지로 이동
+      window.location.href = url;
+      return;
+    }
+
+    const bs = window.DongriGoBoardState;
+    if (bs && typeof bs.setLastUrl === 'function') bs.setLastUrl(url);
+    if (bs && typeof bs.startLoading === 'function') bs.startLoading(url);
 
     try {
       if (inflight) inflight.abort();
@@ -96,24 +105,34 @@ Globe integration (globe.gl) - TopoJSON only
       });
 
       if (!res.ok) {
+        if (bs && typeof bs.stopLoading === 'function') bs.stopLoading();
         window.location.href = url;
         return;
       }
 
       const html = await res.text();
-      board.innerHTML = html;
+      boardContent.innerHTML = html;
 
       if (window.htmx && typeof window.htmx.process === 'function') {
-        window.htmx.process(board);
+        window.htmx.process(boardContent);
       }
 
       window.history.pushState({}, '', url);
 
+      if (bs && typeof bs.stopLoading === 'function') bs.stopLoading();
+      if (bs && typeof bs.hideError === 'function') bs.hideError();
+
       const evt = new CustomEvent('htmx:afterSwap', { bubbles: true });
-      board.dispatchEvent(evt);
+      boardContent.dispatchEvent(evt);
 
     } catch (e) {
       if (e && e.name === 'AbortError') return;
+
+      if (bs && typeof bs.showError === 'function') {
+        bs.showError(url);
+        return;
+      }
+
       window.location.href = url;
     }
   }
@@ -349,8 +368,9 @@ Globe integration (globe.gl) - TopoJSON only
       globe.polygonAltitude(globe.polygonAltitude());
     });
 
+    // Phase2: swap target이 #boardContent로 바뀌었으므로 여기 타겟도 수정
     document.body.addEventListener('htmx:afterSwap', (e) => {
-      if (e.target && e.target.id === 'board') {
+      if (e.target && e.target.id === 'boardContent') {
         const slug = getSelectedSlugFromPathname();
         if (!slug) return;
         selectedSlug = slug;

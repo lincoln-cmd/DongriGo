@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.core.paginator import Paginator
 from django.http import HttpResponse
 from django.db.models import Q, Prefetch
@@ -12,7 +12,7 @@ from django.core.exceptions import FieldError
 from django.views.decorators.http import require_POST
 from django.contrib.admin.views.decorators import staff_member_required
 
-from .models import Country, Post, PostImage
+from .models import Country, Post, PostImage, PostSlugHistory
 
 
 def get_tabs():
@@ -198,6 +198,27 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
             )
 
         except Post.DoesNotExist:
+            # ✅ Step 3: 예전 slug/country/category 조합이면 최신 URL로 301 리다이렉트
+            h = (
+                PostSlugHistory.objects
+                .select_related("post", "country")
+                .filter(
+                    country=selected_country,
+                    category=selected_category,
+                    old_slug=post_slug,
+                    post__is_published=True,
+                )
+                .order_by("-created_at")
+                .first()
+            )
+            if h and h.post:
+                new_url = h.post.get_absolute_url()
+                if is_htmx(request):
+                    resp = HttpResponse("", status=204)
+                    resp["HX-Redirect"] = new_url
+                    return resp
+                return redirect(new_url, permanent=True)
+
             selected_post = None
 
     category_path = f"/{selected_country.slug}/{selected_category_slug}/" if selected_country else "/"

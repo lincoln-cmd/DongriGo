@@ -22,13 +22,12 @@
             {# 2) 없으면 ISO 기반 국기(span) fallback #}
             <span class="fi fi-{{ selected_country.iso_a2|lower }}" aria-label="{{ selected_country.name }}"></span>
           {% endif %}
-    
+
           <span>{{ selected_country.name }}</span>
         </h2>
       </div>
       <a class="close-btn js-close" href="/">닫기</a>
     </div>
-
 
   <div class="hint">{{ selected_country.short_description }}</div>
 
@@ -37,7 +36,7 @@
       <a class="{% if selected_category == key %}active{% endif %}"
          href="/{{ selected_country.slug }}/{{ cat_slug }}/?page=1{% if q %}&q={{ q|urlencode }}{% endif %}"
          hx-get="/{{ selected_country.slug }}/{{ cat_slug }}/?page=1{% if q %}&q={{ q|urlencode }}{% endif %}"
-         hx-target="#board"
+         hx-target="#boardContent"
          hx-swap="innerHTML"
          hx-indicator=".htmx-indicator"
          hx-push-url="true">
@@ -49,7 +48,7 @@
   <form class="search"
         action="{{ category_path }}" method="get"
         hx-get="{{ category_path }}"
-        hx-target="#board"
+        hx-target="#boardContent"
         hx-swap="innerHTML"
         hx-indicator=".htmx-indicator"
         hx-push-url="true">
@@ -64,7 +63,7 @@
       <a class="hint"
          href="{{ category_path }}?page=1"
          hx-get="{{ category_path }}?page=1"
-         hx-target="#board"
+         hx-target="#boardContent"
          hx-swap="innerHTML"
          hx-indicator=".htmx-indicator"
          hx-push-url="true">검색 해제</a>
@@ -76,7 +75,7 @@
       <a class="toc-link {% if selected_post and selected_post.slug == p.slug %}active{% endif %}"
          href="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}"
          hx-get="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}"
-         hx-target="#board"
+         hx-target="#boardContent"
          hx-swap="innerHTML"
          hx-indicator=".htmx-indicator"
          hx-push-url="true">
@@ -97,7 +96,7 @@
       <a class="close-btn pager-back"
          href="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}"
          hx-get="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}"
-         hx-target="#board"
+         hx-target="#boardContent"
          hx-swap="innerHTML"
          hx-indicator=".htmx-indicator"
          hx-push-url="true">목록</a>
@@ -107,7 +106,7 @@
           {% if page_obj.has_previous %}
             <a href="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
                hx-get="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
-               hx-target="#board" hx-swap="innerHTML"
+               hx-target="#boardContent" hx-swap="innerHTML"
                hx-indicator=".htmx-indicator" hx-push-url="true">이전</a>
           {% else %}
             <span class="hint">이전</span>
@@ -118,7 +117,7 @@
           {% if page_obj.has_next %}
             <a href="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
                hx-get="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
-               hx-target="#board" hx-swap="innerHTML"
+               hx-target="#boardContent" hx-swap="innerHTML"
                hx-indicator=".htmx-indicator" hx-push-url="true">다음</a>
           {% else %}
             <span class="hint">다음</span>
@@ -133,7 +132,7 @@
         {% if page_obj.has_previous %}
           <a href="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
              hx-get="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
-             hx-target="#board" hx-swap="innerHTML"
+             hx-target="#boardContent" hx-swap="innerHTML"
              hx-indicator=".htmx-indicator" hx-push-url="true">이전</a>
         {% else %}
           <span class="hint">이전</span>
@@ -144,7 +143,7 @@
         {% if page_obj.has_next %}
           <a href="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
              hx-get="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
-             hx-target="#board" hx-swap="innerHTML"
+             hx-target="#boardContent" hx-swap="innerHTML"
              hx-indicator=".htmx-indicator" hx-push-url="true">다음</a>
         {% else %}
           <span class="hint">다음</span>
@@ -187,7 +186,6 @@
                 style="width:100%; border-radius:10px;"
               />
 
-
               {% if img.caption %}
                 <figcaption class="hint" style="margin-top:6px;">{{ img.caption }}</figcaption>
               {% endif %}
@@ -199,4 +197,18 @@
   {% else %}
     <div class="hint" style="margin-top:12px;">목차에서 글 제목을 클릭하면 내용이 여기에 표시됩니다.</div>
   {% endif %}
+
+{% else %}
+  {# 국가 미선택(빈 상태) #}
+  <div data-has-post="0" hidden></div>
+
+  <div class="board-empty">
+    <h2 style="margin:0 0 10px 0;">국가를 선택하세요</h2>
+    <div class="hint">
+      왼쪽 지구본에서 국가를 클릭하거나, 상단 검색창에서 국가명을 검색해 선택할 수 있습니다.
+    </div>
+    <div class="hint" style="margin-top:10px;">
+      (관리자) 국가/게시물이 없다면 /admin에서 Country, Post를 먼저 추가하세요.
+    </div>
+  </div>
 {% endif %}

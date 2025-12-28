@@ -569,3 +569,134 @@ body { margin:0; font-family: system-ui, sans-serif; overflow-x: hidden; }
   width: 22px;
   height: 22px;
 }
+
+/* =========================
+   Phase 2-1: Board states
+   - stable swap target: #boardContent
+   ========================= */
+
+#boardContent.board-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+/* Overlays inside board */
+#board {
+  position: fixed;
+}
+
+.board-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 16px;
+
+  background: rgba(17,17,17,0.92);
+  backdrop-filter: blur(6px);
+}
+
+.board-overlay[hidden] { display: none !important; }
+
+.board-error-box {
+  width: 100%;
+  max-width: 360px;
+  border: 1px solid #2a2a2a;
+  border-radius: 14px;
+  padding: 14px 14px 12px;
+  background: rgba(10,10,10,0.65);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.35);
+}
+
+.board-error-title {
+  font-size: 16px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.board-error-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+/* Skeleton */
+.board-skeleton {
+  width: 100%;
+  max-width: 420px;
+}
+
+.sk-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.sk-col {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.sk-spacer { height: 14px; }
+
+.sk-line,
+.sk-chip,
+.sk-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.06);
+}
+
+.sk-line { height: 14px; }
+.sk-line.sk-40 { width: 40%; }
+.sk-line.sk-60 { width: 60%; }
+.sk-line.sk-70 { width: 70%; }
+.sk-line.sk-75 { width: 75%; }
+.sk-line.sk-85 { width: 85%; }
+
+.sk-chip {
+  width: 88px;
+  height: 32px;
+  border-radius: 999px;
+}
+
+.sk-card {
+  height: 44px;
+  border-radius: 12px;
+}
+
+.sk-line::before,
+.sk-chip::before,
+.sk-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-40%);
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.02),
+    rgba(255,255,255,0.10),
+    rgba(255,255,255,0.02)
+  );
+  animation: skshine 1.1s ease-in-out infinite;
+}
+
+@keyframes skshine {
+  0% { transform: translateX(-60%); }
+  100% { transform: translateX(60%); }
+}
+
+/* Empty state */
+.board-empty {
+  padding: 12px 4px;
+}

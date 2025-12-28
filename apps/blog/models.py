@@ -7,6 +7,7 @@ import bleach
 import re
 import html
 from django.db.models import Max
+from django.db import IntegrityError
 
 
 class Country(models.Model):
@@ -59,8 +60,6 @@ class Country(models.Model):
 
     def save(self, *args, **kwargs):
         # ✅ ISO 값 정규화
-        # - admin/폼에서 빈 값이 ""로 들어오면(=falsy) 기존 로직이 작동하지 않아 ""가 DB에 저장될 수 있음
-        # - 특히 iso_a3(unique=True)는 ""가 여러 행에 저장되면 UNIQUE 충돌 위험이 커서 "" -> None 으로 정규화
         if self.iso_a2 is not None:
             v = (self.iso_a2 or "").strip().upper()
             self.iso_a2 = v or None
@@ -152,6 +151,22 @@ class Post(models.Model):
             n += 1
 
     def save(self, *args, **kwargs):
+        """
+        ✅ Step 3 적용:
+        - slug/country/category 중 하나라도 바뀌면 (이전 URL이 깨지므로)
+          PostSlugHistory에 (이전 country, 이전 category, 이전 slug) 조합을 저장한다.
+        """
+        old_slug = None
+        old_country_id = None
+        old_category = None
+
+        if self.pk:
+            old = Post.objects.filter(pk=self.pk).values("slug", "country_id", "category").first()
+            if old:
+                old_slug = old.get("slug")
+                old_country_id = old.get("country_id")
+                old_category = old.get("category")
+
         # ✅ slug 비어있으면 자동 생성(중복이면 -2, -3…)
         if not self.slug:
             self.slug = self._unique_slugify(Post, self.title, instance_pk=self.pk)
@@ -161,6 +176,22 @@ class Post(models.Model):
             self.published_at = timezone.localdate()
 
         super().save(*args, **kwargs)
+
+        # ✅ 이전 URL 보존(슬러그/국가/카테고리 변경 시)
+        if self.pk and old_slug and old_country_id and old_category:
+            old_key = (old_country_id, old_category, old_slug)
+            new_key = (self.country_id, self.category, self.slug)
+            if old_key != new_key:
+                try:
+                    PostSlugHistory.objects.get_or_create(
+                        country_id=old_country_id,
+                        category=old_category,
+                        old_slug=old_slug,
+                        defaults={"post": self},
+                    )
+                except IntegrityError:
+                    # 드물게: 동일 old URL이 이미 다른 히스토리로 점유된 경우(보수적으로 무시)
+                    pass
 
     def _replace_img_tokens_outside_codeblocks(self, text: str) -> str:
         """
@@ -304,6 +335,7 @@ class PostImage(models.Model):
             self.order = (max_order or 0) + 10  # 10 단위로 띄워두면 중간 삽입이 편함
         super().save(*args, **kwargs)
 
+
 class SeedMeta(models.Model):
     """Seed(초기 데이터) 적용 이력을 1-row로 기록해 재시딩을 안전하게 만든다."""
 
@@ -319,3 +351,23 @@ class SeedMeta(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.fixture_sha256[:8] if self.fixture_sha256 else 'no-hash'})"
+
+
+class PostSlugHistory(models.Model):
+    post = models.ForeignKey("Post", on_delete=models.CASCADE, related_name="slug_history")
+    country = models.ForeignKey("Country", on_delete=models.CASCADE, related_name="post_slug_history")
+    category = models.CharField(max_length=20)  # Post.category와 동일 값 저장
+    old_slug = models.SlugField(max_length=220, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["country", "category", "old_slug"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=["country", "category", "old_slug"], name="uniq_oldslug_per_country_cat"),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.country.slug}/{self.category}:{self.old_slug} -> post:{self.post_id}"
