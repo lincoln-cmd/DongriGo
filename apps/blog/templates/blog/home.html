@@ -3,6 +3,7 @@
 <head>
   {% load static %}
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>DongriGo: 아는 만큼 보이는 세계여행!</title>
 
   <link rel="stylesheet" href="{% static 'blog/css/pygments.css' %}">
@@ -164,18 +165,32 @@
         }
       });
 
+      // ✅ 닫기는 js-close만 (목록/기타 버튼이 닫힘으로 오인되지 않게)
       document.addEventListener("click", (e) => {
-        const close = e.target.closest && e.target.closest("a.close-btn");
+        const close = e.target.closest && e.target.closest("a.js-close");
         if (!close) return;
 
         e.preventDefault();
+
+        const href = close.getAttribute("href") || "/";
+
         wrap.classList.add("closing");
         wrap.classList.remove("has-board");
         wrap.classList.add("no-board");
+        wrap.dataset.hasBoard = "0";
 
+        // 애니메이션 후 상태 정리
         setTimeout(() => {
           wrap.classList.remove("closing");
-          window.location.href = close.getAttribute("href") || "/";
+
+          // globe.js에서 제공하면: 풀리로드 없이 보드/URL 동기화
+          if (window.DongriGoGlobe && typeof window.DongriGoGlobe.closeBoard === "function") {
+            window.DongriGoGlobe.closeBoard({ href, loadHome: true, pushUrl: true });
+            return;
+          }
+
+          // fallback: 기존 방식
+          window.location.href = href;
         }, 260);
       });
     })();

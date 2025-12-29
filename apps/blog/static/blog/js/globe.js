@@ -78,13 +78,32 @@ Globe integration (globe.gl) - TopoJSON only
     return await res.json();
   }
 
+  function setBoardOpen(isOpen) {
+    const wrap = document.querySelector('.wrap');
+    if (!wrap) return;
+
+    if (isOpen) {
+      wrap.classList.remove('no-board');
+      wrap.classList.add('has-board');
+      wrap.dataset.hasBoard = '1';
+      document.documentElement.classList.add('board-open');
+    } else {
+      wrap.classList.remove('has-board');
+      wrap.classList.add('no-board');
+      wrap.dataset.hasBoard = '0';
+      document.documentElement.classList.remove('board-open');
+    }
+  }
+
   // ✅ 보드 갱신(fetch + HX-Request)
   // Phase2: 보드 "껍데기(#board)"는 고정, "내용(#boardContent)"만 갱신해야 함.
   let inflight = null;
-  async function loadBoard(url) {
+  async function loadBoard(url, opts) {
+    const options = opts || {};
+    const pushUrl = (options.pushUrl !== false);
+
     const boardContent = document.getElementById('boardContent');
     if (!boardContent) {
-      // 템플릿 구조가 다르면 안전하게 풀 페이지로 이동
       window.location.href = url;
       return;
     }
@@ -117,7 +136,9 @@ Globe integration (globe.gl) - TopoJSON only
         window.htmx.process(boardContent);
       }
 
-      window.history.pushState({}, '', url);
+      if (pushUrl) {
+        window.history.pushState({}, '', url);
+      }
 
       if (bs && typeof bs.stopLoading === 'function') bs.stopLoading();
       if (bs && typeof bs.hideError === 'function') bs.hideError();
@@ -137,36 +158,53 @@ Globe integration (globe.gl) - TopoJSON only
     }
   }
 
-  function openBoardForSlug(slug) {
+  function openBoardForSlug(slug, opts) {
     if (!slug) return;
-
-    const wrap = document.querySelector('.wrap');
-    if (wrap) {
-      wrap.classList.remove('no-board');
-      wrap.classList.add('has-board');
-      wrap.dataset.hasBoard = '1';
-    }
 
     const globeArea = document.getElementById('globeArea');
     if (globeArea) globeArea.dataset.selectedCountrySlug = slug;
 
     setActiveCountryLink(slug);
-    loadBoard(`/${encodeURIComponent(slug)}/`);
+    setBoardOpen(true);
+
+    const pushUrl = !(opts && opts.pushUrl === false);
+    loadBoard(`/${encodeURIComponent(slug)}/`, { pushUrl });
+  }
+
+  function closeBoard(opts) {
+    const options = opts || {};
+    const href = options.href || '/';
+    const pushUrl = (options.pushUrl !== false);
+    const loadHome = !!options.loadHome;
+
+    // UI state
+    setBoardOpen(false);
+
+    const globeArea = document.getElementById('globeArea');
+    if (globeArea) globeArea.dataset.selectedCountrySlug = '';
+
+    setActiveCountryLink('');
+
+    // URL + content
+    if (pushUrl) {
+      try { window.history.pushState({}, '', href); } catch (_) {}
+    }
+    if (loadHome) {
+      loadBoard(href, { pushUrl: false });
+    }
   }
 
   // -------------------------
   // ✅ 우선순위 매핑(충돌 시 덮어쓰기)
   // -------------------------
   function isNumericishSlug(slug) {
-    // "-99" 같은 케이스를 낮은 선호로 보기 위한 보조(동점일 때만 사용)
     return /^-?\d+$/.test((slug || '').toString().trim());
   }
 
   function betterSlug(newSlug, oldSlug) {
-    // 동점(prio 같음)일 때만 사용: 숫자 슬러그보다 일반 슬러그 선호
     const n = isNumericishSlug(newSlug);
     const o = isNumericishSlug(oldSlug);
-    if (n !== o) return o; // old가 numericish면 new가 더 낫다
+    if (n !== o) return o;
     return false;
   }
 
@@ -227,12 +265,10 @@ Globe integration (globe.gl) - TopoJSON only
     countries.forEach((c) => {
       if (!c || !c.slug) return;
 
-      // 가장 강한 키들
       putKey(c.name_en, c.slug, 5);
       putKey(c.name, c.slug, 4);
       putKey(extractParenEn(c.name), c.slug, 4);
 
-      // aliases(충돌 가능성이 높으니 낮게)
       const aliases = c.aliases;
       if (typeof aliases === 'string' && aliases.trim()) {
         aliases
@@ -242,7 +278,6 @@ Globe integration (globe.gl) - TopoJSON only
           .forEach((a) => putKey(a, c.slug, 2));
       }
 
-      // ISO는 참고용(TopoJSON 이름 매칭에 직접 쓰이진 않음)
       putKey(c.iso_a2, c.slug, 1);
       putKey(c.iso_a3, c.slug, 1);
     });
@@ -251,6 +286,10 @@ Globe integration (globe.gl) - TopoJSON only
       document.getElementById('globeArea')?.dataset.selectedCountrySlug ||
       getSelectedSlugFromPathname();
 
+    // 초기 상태: URL에 슬러그가 있으면 보드 오픈 상태로 동기화
+    if (selectedSlug) setBoardOpen(true);
+    else setBoardOpen(false);
+
     const globe = window.Globe()(mount)
       .globeImageUrl(EARTH_TEXTURE_URL)
       .backgroundColor('#000')
@@ -258,7 +297,6 @@ Globe integration (globe.gl) - TopoJSON only
       .atmosphereColor('#ffffff')
       .atmosphereAltitude(0.12);
 
-    // 렌더 해상도 제한
     try {
       if (typeof globe.renderer === 'function') {
         const r = globe.renderer();
@@ -341,7 +379,7 @@ Globe integration (globe.gl) - TopoJSON only
         globe.polygonCapColor(globe.polygonCapColor());
         globe.polygonAltitude(globe.polygonAltitude());
 
-        openBoardForSlug(slug);
+        openBoardForSlug(slug, { pushUrl: true });
       });
 
     // ✅ TopoJSON only
@@ -359,11 +397,25 @@ Globe integration (globe.gl) - TopoJSON only
 
     setActiveCountryLink(selectedSlug);
 
+    // ✅ 뒤로가기/앞으로가기: URL 기준으로 보드 열림/닫힘 동기화
     window.addEventListener('popstate', () => {
       const slug = getSelectedSlugFromPathname();
-      if (!slug) return;
+
+      if (!slug) {
+        selectedSlug = '';
+        setActiveCountryLink('');
+        setBoardOpen(false);
+        loadBoard('/', { pushUrl: false }); // 홈 보드(empty state)로 동기화
+        globe.polygonCapColor(globe.polygonCapColor());
+        globe.polygonAltitude(globe.polygonAltitude());
+        return;
+      }
+
       selectedSlug = slug;
       setActiveCountryLink(selectedSlug);
+      setBoardOpen(true);
+      loadBoard(`/${encodeURIComponent(slug)}/`, { pushUrl: false });
+
       globe.polygonCapColor(globe.polygonCapColor());
       globe.polygonAltitude(globe.polygonAltitude());
     });
@@ -372,12 +424,21 @@ Globe integration (globe.gl) - TopoJSON only
     document.body.addEventListener('htmx:afterSwap', (e) => {
       if (e.target && e.target.id === 'boardContent') {
         const slug = getSelectedSlugFromPathname();
-        if (!slug) return;
-        selectedSlug = slug;
+        selectedSlug = slug || '';
         setActiveCountryLink(selectedSlug);
+
+        // HTMX로 특정 국가 보드로 진입한 경우도 보드 오픈 동기화
+        setBoardOpen(!!selectedSlug);
+
         globe.polygonCapColor(globe.polygonCapColor());
         globe.polygonAltitude(globe.polygonAltitude());
       }
     });
+
+    // ✅ 외부(템플릿 JS)에서 쓰기 위한 최소 API 노출
+    window.DongriGoGlobe = window.DongriGoGlobe || {};
+    window.DongriGoGlobe.loadBoard = loadBoard;
+    window.DongriGoGlobe.openBoardForSlug = openBoardForSlug;
+    window.DongriGoGlobe.closeBoard = closeBoard;
   });
 })();
