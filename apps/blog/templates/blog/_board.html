@@ -4,91 +4,95 @@
   {# 읽기모드 판별용 마커 #}
   <div data-has-post="{% if selected_post %}1{% else %}0{% endif %}" hidden></div>
 
-  <div class="board-header">
-    <div>
-      <h2 style="margin:0 0 8px 0; display:flex; align-items:center; gap:10px;">
-        {# 1) Cloudinary 국기 있으면 우선 표시 #}
-        {% if selected_country.flag_image %}
-          <img
-            src="{{ selected_country.flag_image.url|cld_transform:'w_48,h_32,c_fill,q_auto,f_auto' }}"
-            alt=""
-            class="flag-img"
-            loading="lazy"
-            width="48"
-            height="32"
-            style="margin:0;"
-          />
-        {% elif selected_country.iso_a2 %}
-          {# 2) 없으면 ISO 기반 국기(span) fallback #}
-          <span class="fi fi-{{ selected_country.iso_a2|lower }}" aria-label="{{ selected_country.name }}"></span>
-        {% endif %}
+  {# ✅ 모바일 sticky 묶음(헤더+탭+검색) #}
+  <div class="board-sticky">
+    <div class="board-header">
+      <div>
+        <h2 style="margin:0 0 8px 0; display:flex; align-items:center; gap:10px;">
+          {# 1) Cloudinary 국기 있으면 우선 표시 #}
+          {% if selected_country.flag_image %}
+            <img
+              src="{{ selected_country.flag_image.url|cld_transform:'w_48,h_32,c_fill,q_auto,f_auto' }}"
+              alt=""
+              class="flag-img"
+              loading="lazy"
+              width="48"
+              height="32"
+              style="margin:0;"
+            />
+          {% elif selected_country.iso_a2 %}
+            {# 2) 없으면 ISO 기반 국기(span) fallback #}
+            <span class="fi fi-{{ selected_country.iso_a2|lower }}" aria-label="{{ selected_country.name }}"></span>
+          {% endif %}
 
-        <span>{{ selected_country.name }}</span>
+          <span>{{ selected_country.name }}</span>
 
-        {# 국가 전체 게시물 수 배지(선택) #}
-        {% if country_posts_total is not None %}
-          <span class="hint" style="margin-left:6px;">({{ country_posts_total }})</span>
-        {% endif %}
-      </h2>
-    </div>
-    <a class="close-btn js-close" href="/">닫기</a>
-  </div>
-
-  {# short_description 비어있으면 숨김 #}
-  {% if selected_country.short_description %}
-    <div class="hint">{{ selected_country.short_description }}</div>
-  {% endif %}
-
-  <div class="tabs">
-    {% for key,label,cat_slug in tabs %}
-      <a class="{% if selected_category == key %}active{% endif %}"
-         href="/{{ selected_country.slug }}/{{ cat_slug }}/?page=1{% if q %}&q={{ q|urlencode }}{% endif %}"
-         hx-get="/{{ selected_country.slug }}/{{ cat_slug }}/?page=1{% if q %}&q={{ q|urlencode }}{% endif %}"
-         hx-target="#boardContent"
-         hx-swap="innerHTML"
-         hx-indicator=".htmx-indicator"
-         hx-push-url="true">
-        {{ label }}
-      </a>
-    {% endfor %}
-  </div>
-
-  {# ✅ Phase 2-5: 보드 검색 UX 래퍼(최근 검색 드롭다운) #}
-  <div class="board-search-wrap">
-    <form class="search"
-          action="{{ category_path }}" method="get"
-          hx-get="{{ category_path }}"
-          hx-target="#boardContent"
-          hx-swap="innerHTML"
-          hx-indicator=".htmx-indicator"
-          hx-push-url="true"
-          autocomplete="off">
-      <input class="search-input" type="text" name="q" value="{{ q|default:'' }}"
-             placeholder="글 제목 검색" />
-      <input type="hidden" name="page" value="1" />
-      <button class="search-btn" type="submit">검색</button>
-    </form>
-
-    <div class="search-suggest" data-search-suggest hidden aria-hidden="true">
-      <div class="search-suggest__head">
-        <span class="hint">최근 검색</span>
-        <button class="search-suggest__clear" type="button" data-search-clear>지우기</button>
+          {# 국가 전체 게시물 수 배지(선택) #}
+          {% if country_posts_total is not None %}
+            <span class="hint" style="margin-left:6px;">({{ country_posts_total }})</span>
+          {% endif %}
+        </h2>
       </div>
-      <div class="search-suggest__list" data-search-list></div>
+      <a class="close-btn js-close" href="/">닫기</a>
     </div>
-  </div>
 
-  {% if q %}
-    <div style="margin-top:8px;">
-      <a class="hint"
-         href="{{ category_path }}?page=1"
-         hx-get="{{ category_path }}?page=1"
-         hx-target="#boardContent"
-         hx-swap="innerHTML"
-         hx-indicator=".htmx-indicator"
-         hx-push-url="true">검색 해제</a>
+    {# short_description 비어있으면 숨김 #}
+    {% if selected_country.short_description %}
+      <div class="hint">{{ selected_country.short_description }}</div>
+    {% endif %}
+
+    <div class="tabs">
+      {% for key,label,cat_slug in tabs %}
+        <a class="{% if selected_category == key %}active{% endif %}"
+           href="/{{ selected_country.slug }}/{{ cat_slug }}/?page=1{% if q %}&q={{ q|urlencode }}{% endif %}"
+           hx-get="/{{ selected_country.slug }}/{{ cat_slug }}/?page=1{% if q %}&q={{ q|urlencode }}{% endif %}"
+           hx-target="#boardContent"
+           hx-swap="innerHTML"
+           hx-indicator=".htmx-indicator"
+           hx-push-url="true">
+          {{ label }}
+        </a>
+      {% endfor %}
     </div>
-  {% endif %}
+
+    {# ✅ Phase 2-5: 보드 검색 UX 래퍼(최근 검색 드롭다운) #}
+    <div class="board-search-wrap">
+      <form class="search"
+            action="{{ category_path }}" method="get"
+            hx-get="{{ category_path }}"
+            hx-target="#boardContent"
+            hx-swap="innerHTML"
+            hx-indicator=".htmx-indicator"
+            hx-push-url="true"
+            autocomplete="off">
+        <input class="search-input" type="text" name="q" value="{{ q|default:'' }}"
+               placeholder="글 제목 검색" />
+        <input type="hidden" name="page" value="1" />
+        <button class="search-btn" type="submit">검색</button>
+      </form>
+
+      <div class="search-suggest" data-search-suggest hidden aria-hidden="true">
+        <div class="search-suggest__head">
+          <span class="hint">최근 검색</span>
+          <button class="search-suggest__clear" type="button" data-search-clear>지우기</button>
+        </div>
+        <div class="search-suggest__list" data-search-list></div>
+      </div>
+    </div>
+
+    {% if q %}
+      <div style="margin-top:8px;">
+        <a class="hint"
+           href="{{ category_path }}?page=1"
+           hx-get="{{ category_path }}?page=1"
+           hx-target="#boardContent"
+           hx-swap="innerHTML"
+           hx-indicator=".htmx-indicator"
+           hx-push-url="true">검색 해제</a>
+      </div>
+    {% endif %}
+  </div>
+  {# /board-sticky #}
 
   <div class="toc">
     {% for p in posts %}
@@ -102,7 +106,6 @@
         {{ p.title|highlight:q }}
       </a>
     {% empty %}
-      {# Phase 2-2: 빈 상태 메시지 정교화 #}
       {% if q %}
         <div class="board-emptybox">
           <div class="board-emptytitle">검색 결과가 없습니다</div>
@@ -246,7 +249,6 @@
   {% endif %}
 
 {% else %}
-  {# 국가 미선택(빈 상태) #}
   <div data-has-post="0" hidden></div>
 
   <div class="board-empty">

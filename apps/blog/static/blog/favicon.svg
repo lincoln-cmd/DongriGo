@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DongriGo favicon">
+  <!-- Background -->
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#0B1220"></rect>
+
+  <!-- Globe -->
+  <circle cx="30" cy="34" r="16" fill="#0F2A5A"></circle>
+  <circle cx="30" cy="34" r="16" fill="none" stroke="#67E8F9" stroke-opacity="0.28" stroke-width="2"></circle>
+
+  <!-- Meridians / Parallels (simplified) -->
+  <path d="M14 34h32" stroke="#67E8F9" stroke-opacity="0.22" stroke-width="2" stroke-linecap="round"></path>
+  <path d="M30 18c5.2 4.2 8.5 9.7 8.5 16s-3.3 11.8-8.5 16" fill="none" stroke="#67E8F9" stroke-opacity="0.22" stroke-width="2" stroke-linecap="round"></path>
+  <path d="M30 18c-5.2 4.2-8.5 9.7-8.5 16s3.3 11.8 8.5 16" fill="none" stroke="#67E8F9" stroke-opacity="0.22" stroke-width="2" stroke-linecap="round"></path>
+
+  <!-- Orbit swoosh -->
+  <path d="M16 24c7-8 22-11 32-3" fill="none" stroke="#A78BFA" stroke-width="3" stroke-linecap="round"></path>
+
+  <!-- Pin / dot -->
+  <circle cx="49.5" cy="23.5" r="3.2" fill="#A78BFA"></circle>
+  <circle cx="49.5" cy="23.5" r="1.4" fill="#0B1220"></circle>
+
+  <!-- "D" monogram (bold, readable at small sizes) -->
+  <path d="M20.5 26.5h8.6c5.2 0 9.4 4.2 9.4 9.4s-4.2 9.2-9.4 9.2h-8.6V26.5z" fill="#E2E8F0"></path>
+  <path d="M25 30.5h3.6c3.4 0 6.2 2.7 6.2 6s-2.8 6-6.2 6H25V30.5z" fill="#0B1220"></path>
+</svg>

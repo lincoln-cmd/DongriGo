@@ -10,6 +10,9 @@
   <link rel="stylesheet" href="{% static 'blog/css/codehilite_extra.css' %}">
   <link rel="stylesheet" href="{% static 'blog/css/site.css' %}">
   <link rel="stylesheet" href="{% static 'blog/vendor/flag-icons/css/flag-icons.min.css' %}">
+  <link rel="icon" type="image/svg+xml" href="{% static 'blog/favicon.svg' %}">
+  <link rel="icon" sizes="any" href="{% static 'blog/favicon.svg' %}">
+
 </head>
 
 <body>
@@ -56,6 +59,9 @@
 
     <!-- RIGHT: Board (stable shell + swappable content) -->
     <div class="board" id="board">
+      <!-- ✅ swipe edge handle -->
+      <div class="board-swipe-edge" id="boardSwipeEdge" aria-hidden="true"></div>
+
       <div id="boardContent" class="board-content">
         {% include "blog/_board.html" %}
       </div>
@@ -109,6 +115,9 @@
       </div>
     </div>
 
+    <!-- ✅ Dim overlay (mobile polish) -->
+    <div class="board-dim" id="boardDim" aria-hidden="true"></div>
+
     <!-- 기존 HTMX indicator(토스트용)는 유지 -->
     <div class="htmx-indicator">불러오는 중...</div>
   </div>
@@ -154,44 +163,297 @@
       const wrap = document.querySelector(".wrap");
       if (!wrap) return;
 
-      document.addEventListener("DOMContentLoaded", () => {
-        if (wrap.dataset.hasBoard === "1") {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              wrap.classList.remove("no-board");
-              wrap.classList.add("has-board");
-            });
-          });
-        }
-      });
+      const mm = window.matchMedia("(max-width: 820px)");
+      const boardEl = document.getElementById("board");
+      const dimEl = document.getElementById("boardDim");
+      const edgeEl = document.getElementById("boardSwipeEdge");
+      if (!boardEl || !edgeEl) return;
 
-      // ✅ 닫기는 js-close만 (목록/기타 버튼이 닫힘으로 오인되지 않게)
-      document.addEventListener("click", (e) => {
-        const close = e.target.closest && e.target.closest("a.js-close");
-        if (!close) return;
+      function isBoardOpen() {
+        return wrap.classList.contains("has-board");
+      }
 
-        e.preventDefault();
+      function ensureDimOn() {
+        if (!dimEl) return;
+        if (!mm.matches) return;
+        if (isBoardOpen()) dimEl.classList.add("on");
+      }
 
-        const href = close.getAttribute("href") || "/";
+      function closeBoardTo(href) {
+        const target = href || "/";
+        
+        // ✅ 스냅 닫기에서 남는 inline transform/transition 제거 (다음 오픈 대비)
+        boardEl.style.transition = "";
+        boardEl.style.transform = "";
 
         wrap.classList.add("closing");
         wrap.classList.remove("has-board");
         wrap.classList.add("no-board");
         wrap.dataset.hasBoard = "0";
 
-        // 애니메이션 후 상태 정리
+        if (dimEl) {
+          dimEl.style.opacity = "";
+          dimEl.classList.remove("on");
+        }
+
         setTimeout(() => {
           wrap.classList.remove("closing");
 
-          // globe.js에서 제공하면: 풀리로드 없이 보드/URL 동기화
           if (window.DongriGoGlobe && typeof window.DongriGoGlobe.closeBoard === "function") {
-            window.DongriGoGlobe.closeBoard({ href, loadHome: true, pushUrl: true });
+            window.DongriGoGlobe.closeBoard({ href: target, loadHome: true, pushUrl: true });
             return;
           }
 
-          // fallback: 기존 방식
-          window.location.href = href;
+          window.location.href = target;
         }, 260);
+      }
+
+      // ✅ dim 클릭(탭)으로 닫기 (mobile only)
+      if (dimEl) {
+        dimEl.addEventListener("click", (e) => {
+          if (!mm.matches) return;
+          if (!isBoardOpen()) return;
+          e.preventDefault();
+        
+          const w = boardEl.getBoundingClientRect().width || window.innerWidth;
+        
+          // 딤도 같이 페이드아웃
+          if (dimEl) {
+            dimEl.classList.add("on");
+            dimEl.style.opacity = "0";
+          }
+        
+          // 보드 스냅 닫기
+          snapTo(w, 160);
+        
+          window.setTimeout(() => {
+            resetDrag();      // dragging 상태가 아니어도 안전(정리용)
+            closeBoardTo("/"); // closeBoardTo 내부에서 transform 초기화도 이미 추가했지
+          }, 170);
+        });
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        if (wrap.dataset.hasBoard === "1") {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              wrap.classList.remove("no-board");
+              wrap.classList.add("has-board");
+              ensureDimOn();
+            });
+          });
+        }
+      });
+
+      // ✅ 보드가 “열리는” 일반 케이스에서도 딤 ON
+      document.body.addEventListener("htmx:afterSwap", () => {
+        ensureDimOn();
+      });
+
+      // ✅ 닫기는 js-close만
+      document.addEventListener("click", (e) => {
+        const close = e.target.closest && e.target.closest("a.js-close");
+        if (!close) return;
+        e.preventDefault();
+        closeBoardTo(close.getAttribute("href") || "/");
+      });
+
+      // ✅ SWIPE CLOSE: edge에서만 이벤트 받기 (mobile only)
+      let startX = 0, startY = 0, lastX = 0;
+      let dragging = false;
+      let started = false;
+
+      // velocity tracking (최근 구간 속도)
+      let prevX = 0;
+      let prevT = 0;
+      let lastV = 0; // px/ms
+
+      function snapTo(x, ms) {
+        boardEl.style.transition = `transform ${ms}ms ease`;
+        boardEl.style.transform = `translateX(${x}px)`;
+        window.setTimeout(() => {
+          boardEl.style.transition = "";
+        }, ms + 20);
+      }
+
+      function snapBack(ms) {
+        boardEl.style.transition = `transform ${ms}ms ease`;
+        boardEl.style.transform = `translateX(0px)`;
+        window.setTimeout(() => {
+          boardEl.style.transition = "";
+          boardEl.style.transform = "";
+        }, ms + 20);
+      }
+
+      // ✅ 상태 정리 전용 (중첩 함수 제거)
+      function resetDrag() {
+        dragging = false;
+        started = false;
+        wrap.classList.remove("dragging");
+        if (dimEl) dimEl.style.opacity = "";
+        ensureDimOn();
+        lastV = 0;
+      }
+
+      edgeEl.addEventListener("pointerdown", (e) => {
+        if (!mm.matches) return;
+        if (!isBoardOpen()) return;
+
+        started = true;
+        dragging = false;
+
+        startX = e.clientX;
+        startY = e.clientY;
+        lastX = startX;
+
+        const t = performance.now();
+        prevX = startX;
+        prevT = t;
+        lastV = 0;
+
+        ensureDimOn();
+
+        try { edgeEl.setPointerCapture(e.pointerId); } catch (_) {}
+      });
+
+      edgeEl.addEventListener("pointermove", (e) => {
+        if (!mm.matches) return;
+        if (!started) return;
+
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+
+        if (dx < 0) return; // 오른쪽만
+
+        if (!dragging) {
+          if (Math.abs(dx) < 10) return;
+          if (Math.abs(dx) < Math.abs(dy) + 8) return; // 세로 스크롤 우선
+          dragging = true;
+          wrap.classList.add("dragging");
+        }
+
+        e.preventDefault();
+
+        // velocity(최근 구간) 업데이트
+        const nowT = performance.now();
+        const nowX = e.clientX;
+        const dt = Math.max(1, nowT - prevT);
+        lastV = (nowX - prevX) / dt; // px/ms
+
+        prevT = nowT;
+        prevX = nowX;
+
+        lastX = nowX;
+
+        const w = boardEl.getBoundingClientRect().width || window.innerWidth;
+        const clamped = Math.min(dx, w);
+        boardEl.style.transform = `translateX(${clamped}px)`;
+
+        // ✅ 딤 진행도 반영
+        if (dimEl) {
+          dimEl.classList.add("on");
+          const t = Math.max(0, Math.min(1, clamped / w));
+          const opacity = 0.35 * (1 - t);
+          dimEl.style.opacity = String(opacity);
+        }
+      }, { passive: false });
+
+      edgeEl.addEventListener("pointerup", () => {
+        if (!mm.matches) return;
+        if (!started) return;
+
+        const dx = lastX - startX;
+        const w = boardEl.getBoundingClientRect().width || window.innerWidth;
+
+        const byDistance = dragging && dx > w * 0.25;
+        const byVelocity = dragging && dx > 30 && lastV > 1.1;
+
+        if (byDistance || byVelocity) {
+          if (dimEl) {
+            dimEl.classList.add("on");
+            dimEl.style.opacity = "0";
+          }
+          snapTo(w, 160);
+
+          window.setTimeout(() => {
+            resetDrag();
+            closeBoardTo("/");
+          }, 170);
+          return;
+        }
+
+        snapBack(180);
+        window.setTimeout(() => {
+          resetDrag();
+        }, 190);
+      });
+
+      edgeEl.addEventListener("pointercancel", () => {
+        if (!mm.matches) return;
+        if (!started) return;
+        snapBack(180);
+        window.setTimeout(() => resetDrag(), 190);
+      });
+      
+      // ✅ URL 기준으로 보드 상태 동기화 (뒤로가기/앞으로가기 대응)
+      function isHomePath() {
+        const p = window.location.pathname || "/";
+        return p === "/";
+      }
+    
+      function closeVisualOnly() {
+        // 이미 닫혀있으면 스킵
+        if (!isBoardOpen()) return;
+    
+        // 스냅/드래그에서 남을 수 있는 inline 제거
+        boardEl.style.transition = "";
+        boardEl.style.transform = "";
+    
+        wrap.classList.add("closing");
+        wrap.classList.remove("has-board");
+        wrap.classList.add("no-board");
+        wrap.dataset.hasBoard = "0";
+    
+        if (dimEl) {
+          dimEl.style.opacity = "";
+          dimEl.classList.remove("on");
+        }
+    
+        window.setTimeout(() => {
+          wrap.classList.remove("closing");
+        }, 260);
+      }
+    
+      function openVisualOnly() {
+        // 이미 열려있으면 스킵
+        if (isBoardOpen()) return;
+    
+        wrap.classList.remove("no-board");
+        wrap.classList.add("has-board");
+        wrap.dataset.hasBoard = "1";
+        ensureDimOn();
+      }
+    
+      function syncBoardFromUrl() {
+        // 홈이면 닫힘, 홈이 아니면 열림
+        if (isHomePath()) closeVisualOnly();
+        else openVisualOnly();
+      }
+    
+      // htmx가 히스토리 복원할 때(Back/Forward) 확실히 잡기
+      document.body.addEventListener("htmx:historyRestore", () => {
+        // 복원 직후 URL 기준 동기화
+        syncBoardFromUrl();
+      });
+    
+      // 브라우저 popstate도 같이(보험)
+      window.addEventListener("popstate", () => {
+        syncBoardFromUrl();
+      });
+    
+      // 첫 진입 상태도 URL로 한번 더 정리(보험)
+      document.addEventListener("DOMContentLoaded", () => {
+        syncBoardFromUrl();
       });
     })();
   </script>
