@@ -1,35 +1,43 @@
-{% load cld %}
+{% load cld highlight %}
 
 {% if selected_country %}
   {# 읽기모드 판별용 마커 #}
   <div data-has-post="{% if selected_post %}1{% else %}0{% endif %}" hidden></div>
 
   <div class="board-header">
-      <div>
-        <h2 style="margin:0 0 8px 0; display:flex; align-items:center; gap:10px;">
-          {# 1) Cloudinary 국기 있으면 우선 표시 #}
-          {% if selected_country.flag_image %}
-            <img
-              src="{{ selected_country.flag_image.url|cld_transform:'w_48,h_32,c_fill,q_auto,f_auto' }}"
-              alt=""
-              class="flag-img"
-              loading="lazy"
-              width="48"
-              height="32"
-              style="margin:0;"
-            />
-          {% elif selected_country.iso_a2 %}
-            {# 2) 없으면 ISO 기반 국기(span) fallback #}
-            <span class="fi fi-{{ selected_country.iso_a2|lower }}" aria-label="{{ selected_country.name }}"></span>
-          {% endif %}
+    <div>
+      <h2 style="margin:0 0 8px 0; display:flex; align-items:center; gap:10px;">
+        {# 1) Cloudinary 국기 있으면 우선 표시 #}
+        {% if selected_country.flag_image %}
+          <img
+            src="{{ selected_country.flag_image.url|cld_transform:'w_48,h_32,c_fill,q_auto,f_auto' }}"
+            alt=""
+            class="flag-img"
+            loading="lazy"
+            width="48"
+            height="32"
+            style="margin:0;"
+          />
+        {% elif selected_country.iso_a2 %}
+          {# 2) 없으면 ISO 기반 국기(span) fallback #}
+          <span class="fi fi-{{ selected_country.iso_a2|lower }}" aria-label="{{ selected_country.name }}"></span>
+        {% endif %}
 
-          <span>{{ selected_country.name }}</span>
-        </h2>
-      </div>
-      <a class="close-btn js-close" href="/">닫기</a>
+        <span>{{ selected_country.name }}</span>
+
+        {# 국가 전체 게시물 수 배지(선택) #}
+        {% if country_posts_total is not None %}
+          <span class="hint" style="margin-left:6px;">({{ country_posts_total }})</span>
+        {% endif %}
+      </h2>
     </div>
+    <a class="close-btn js-close" href="/">닫기</a>
+  </div>
 
-  <div class="hint">{{ selected_country.short_description }}</div>
+  {# short_description 비어있으면 숨김 #}
+  {% if selected_country.short_description %}
+    <div class="hint">{{ selected_country.short_description }}</div>
+  {% endif %}
 
   <div class="tabs">
     {% for key,label,cat_slug in tabs %}
@@ -79,13 +87,40 @@
          hx-swap="innerHTML"
          hx-indicator=".htmx-indicator"
          hx-push-url="true">
-        {{ p.title }}
+        {{ p.title|highlight:q }}
       </a>
     {% empty %}
+      {# Phase 2-2: 빈 상태 메시지 정교화 #}
       {% if q %}
-        <div class="hint hint-pad">검색 결과가 없습니다.</div>
+        <div class="board-emptybox">
+          <div class="board-emptytitle">검색 결과가 없습니다</div>
+          <div class="hint">다른 키워드로 검색하거나, 검색을 해제해 보세요.</div>
+          <div class="board-emptyactions">
+            <a class="btn"
+               href="{{ category_path }}?page=1"
+               hx-get="{{ category_path }}?page=1"
+               hx-target="#boardContent"
+               hx-swap="innerHTML"
+               hx-indicator=".htmx-indicator"
+               hx-push-url="true">검색 해제</a>
+          </div>
+        </div>
       {% else %}
-        <div class="hint hint-pad">해당 카테고리에 게시된 글이 없습니다. /admin에서 Post를 작성하세요.</div>
+        {% if country_posts_total == 0 %}
+          <div class="board-emptybox">
+            <div class="board-emptytitle">이 국가에는 아직 게시물이 없습니다</div>
+            <div class="hint">관리자에서 Country / Post를 추가하면 여기에 표시됩니다.</div>
+            <div class="hint" style="margin-top:6px;">(관리자) /admin → Post 추가</div>
+          </div>
+        {% elif category_posts_total == 0 %}
+          <div class="board-emptybox">
+            <div class="board-emptytitle">이 카테고리에는 아직 글이 없습니다</div>
+            <div class="hint">다른 탭을 선택하거나, 관리자에서 글을 작성해 보세요.</div>
+            <div class="hint" style="margin-top:6px;">(관리자) /admin → Post 추가</div>
+          </div>
+        {% else %}
+          <div class="hint hint-pad">게시물이 없습니다.</div>
+        {% endif %}
       {% endif %}
     {% endfor %}
   </div>

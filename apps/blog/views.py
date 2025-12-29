@@ -146,13 +146,28 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
 
     selected_category, selected_category_slug = resolve_selected_category(category_slug)
 
-    # 게시물 목록
-    posts_qs = Post.objects.filter(is_published=True, category=selected_category)
-    if selected_country:
-        posts_qs = posts_qs.filter(country=selected_country)
-
     q = (request.GET.get("q") or "").strip()
-    if q:
+    is_searching = bool(q)
+
+    # -----------------------------
+    # Phase 2-2: 빈 상태 UX용 "카운트" 계산
+    # -----------------------------
+    country_posts_total = 0
+    if selected_country:
+        country_posts_total = (
+            Post.objects.filter(is_published=True, country=selected_country).count()
+        )
+
+    base_category_qs = Post.objects.filter(is_published=True, category=selected_category)
+    if selected_country:
+        base_category_qs = base_category_qs.filter(country=selected_country)
+    category_posts_total = base_category_qs.count()
+
+    # -----------------------------
+    # 목록 쿼리(검색 포함)
+    # -----------------------------
+    posts_qs = base_category_qs
+    if is_searching:
         posts_qs = posts_qs.filter(Q(title__icontains=q) | Q(content__icontains=q))
 
     posts_qs = posts_qs.order_by("-published_at", "-created_at", "-id")
@@ -160,6 +175,7 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
     paginator = Paginator(posts_qs, 10)
     page_obj = paginator.get_page(request.GET.get("page") or "1")
     posts = page_obj.object_list
+    search_results_total = page_obj.paginator.count  # 검색 적용 후 총 개수
 
     selected_post = None
     selected_post_html = ""
@@ -198,7 +214,7 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
             )
 
         except Post.DoesNotExist:
-            # ✅ Step 3: 예전 slug/country/category 조합이면 최신 URL로 301 리다이렉트
+            # ✅ 예전 slug 조합이면 최신 URL로 301 리다이렉트
             h = (
                 PostSlugHistory.objects
                 .select_related("post", "country")
@@ -236,6 +252,13 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
         "selected_post_html": selected_post_html,
         "gallery_images": gallery_images,
         "q": q,
+        "is_searching": is_searching,
+
+        # Phase 2-2 (Empty state UX)
+        "country_posts_total": country_posts_total,
+        "category_posts_total": category_posts_total,
+        "search_results_total": search_results_total,
+
         "category_path": category_path,
     }
 

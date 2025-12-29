@@ -700,3 +700,26 @@ body { margin:0; font-family: system-ui, sans-serif; overflow-x: hidden; }
 .board-empty {
   padding: 12px 4px;
 }
+/* Phase 2-2: Empty state box inside TOC */
+.board-emptybox{
+  border: 1px solid #222;
+  border-radius: 12px;
+  padding: 12px;
+  background: #0b0b0b;
+}
+.board-emptytitle{
+  font-size: 15px;
+  font-weight: 800;
+  margin: 0 0 6px 0;
+}
+.board-emptyactions{
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+mark{
+  background: rgba(255,255,255,.18);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 4px;
+}
