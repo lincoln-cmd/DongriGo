@@ -53,18 +53,30 @@
     {% endfor %}
   </div>
 
-  <form class="search"
-        action="{{ category_path }}" method="get"
-        hx-get="{{ category_path }}"
-        hx-target="#boardContent"
-        hx-swap="innerHTML"
-        hx-indicator=".htmx-indicator"
-        hx-push-url="true">
-    <input class="search-input" type="text" name="q" value="{{ q|default:'' }}"
-           placeholder="글 제목 검색" />
-    <input type="hidden" name="page" value="1" />
-    <button class="search-btn" type="submit">검색</button>
-  </form>
+  {# ✅ Phase 2-5: 보드 검색 UX 래퍼(최근 검색 드롭다운) #}
+  <div class="board-search-wrap">
+    <form class="search"
+          action="{{ category_path }}" method="get"
+          hx-get="{{ category_path }}"
+          hx-target="#boardContent"
+          hx-swap="innerHTML"
+          hx-indicator=".htmx-indicator"
+          hx-push-url="true"
+          autocomplete="off">
+      <input class="search-input" type="text" name="q" value="{{ q|default:'' }}"
+             placeholder="글 제목 검색" />
+      <input type="hidden" name="page" value="1" />
+      <button class="search-btn" type="submit">검색</button>
+    </form>
+
+    <div class="search-suggest" data-search-suggest hidden aria-hidden="true">
+      <div class="search-suggest__head">
+        <span class="hint">최근 검색</span>
+        <button class="search-suggest__clear" type="button" data-search-clear>지우기</button>
+      </div>
+      <div class="search-suggest__list" data-search-list></div>
+    </div>
+  </div>
 
   {% if q %}
     <div style="margin-top:8px;">

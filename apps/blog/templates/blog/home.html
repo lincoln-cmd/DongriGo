@@ -164,33 +164,6 @@
         }
       });
 
-      const input = document.getElementById("countrySearch");
-      const list = document.getElementById("countryList");
-
-      if (input && list) {
-        const filter = () => {
-          const q = input.value.trim().toLowerCase();
-          list.classList.toggle("has-query", q.length > 0);
-
-          const links = list.querySelectorAll("a.country-link");
-          links.forEach(a => {
-            const name = (a.textContent || "").trim().toLowerCase();
-            a.style.display = name.includes(q) ? "" : "none";
-          });
-        };
-
-        input.addEventListener("input", filter);
-        input.addEventListener("keydown", (e) => {
-          if (e.key === "Escape") {
-            input.value = "";
-            filter();
-            input.blur();
-          }
-        });
-
-        filter();
-      }
-
       document.addEventListener("click", (e) => {
         const close = e.target.closest && e.target.closest("a.close-btn");
         if (!close) return;
@@ -208,8 +181,11 @@
     })();
   </script>
 
-  <!-- Board state manager (NEW) -->
+  <!-- Board state manager -->
   <script src="{% static 'blog/js/board_state.js' %}"></script>
+
+  <!-- ✅ Phase 2-5: Search UX (country keyboard + board recent searches) -->
+  <script src="{% static 'blog/js/search_ux.js' %}"></script>
 
   <!-- Globe integration -->
   <script src="{% static 'blog/js/globe.js' %}"></script>
