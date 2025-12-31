@@ -5,7 +5,7 @@ Board state manager
   - open/close based on markers in #boardContent
   - reading mode
   - close (js-close): close UI + pushState('/') + (optional) load home via HTMX
-  - back (js-back): history.back() preferred, fallback to HTMX GET href
+  - back (js-back): history.back() preferred ONLY when detail was entered via HTMX; otherwise load href
   - mobile dim + swipe close
   - URL sync on popstate (visual only)
 */
@@ -28,8 +28,68 @@ Board state manager
   if (!wrap || !board || !boardContent) return;
 
   let lastUrl = '';
-  let closingToHome = false;
 
+  // --------------------------------
+  // Step B support: direct-entry safe back
+  // --------------------------------
+  const KEY_LAST_LIST_URL   = 'DG:lastListUrl';
+  const KEY_LAST_DETAIL_URL = 'DG:lastDetailUrl';
+  const KEY_DETAIL_VIA_HTMX = 'DG:detailViaHtmx'; // ✅ 이번 페이지 생애에서 HTMX로 상세 진입했는지
+
+  function safeGet(key) {
+    try { return sessionStorage.getItem(key) || ''; } catch (_) { return ''; }
+  }
+  function safeSet(key, val) {
+    try { sessionStorage.setItem(key, val || ''); } catch (_) {}
+  }
+
+  function currentPathWithSearch() {
+    return (window.location.pathname || '/') + (window.location.search || '');
+  }
+
+  function _normUrl(u) {
+    try {
+      const x = new URL(u, window.location.origin);
+      return x.pathname + x.search;
+    } catch (_) {
+      return u || '';
+    }
+  }
+
+  // 기대 라우트: /<country>/<category>/<post>/ (세그먼트 3개 이상이면 상세로 간주)
+  function _isPostDetailUrl(u) {
+    const norm = _normUrl(u);
+    const path = (norm.split('?')[0] || '').toString();
+    const parts = path.split('/').filter(Boolean);
+    return parts.length >= 3;
+  }
+
+  function loadHrefIntoBoard(expected) {
+    if (window.htmx && typeof window.htmx.ajax === 'function') {
+      window.htmx.ajax('GET', expected, { target: '#boardContent', swap: 'innerHTML' });
+      try { history.pushState({}, '', expected); } catch (_) {}
+    } else {
+      window.location.href = expected;
+    }
+  }
+
+  // 상세로 "진입하는 요청"이면, 그 직전(현재) URL을 리스트로 저장 + 어떤 상세로 갔는지도 저장
+  function rememberListIfGoingToDetail(requestUrl) {
+    if (!_isPostDetailUrl(requestUrl)) return;
+
+    const cur = currentPathWithSearch(); // 상세로 가기 직전 URL (리스트/탭/검색/페이지)
+    const detail = _normUrl(requestUrl);
+
+    safeSet(KEY_LAST_LIST_URL, cur);
+    safeSet(KEY_LAST_DETAIL_URL, detail);
+
+    // ✅ "이번 페이지 생애에서 HTMX로 상세 진입" 표시
+    safeSet(KEY_DETAIL_VIA_HTMX, '1');
+  }
+
+  // --------------------------------
+  // overlays
+  // --------------------------------
   function setHidden(el, hidden) {
     if (!el) return;
     if (hidden) {
@@ -62,7 +122,7 @@ Board state manager
   }
 
   async function retry() {
-    const url = lastUrl || window.location.pathname + window.location.search;
+    const url = lastUrl || currentPathWithSearch();
     if (!url) return;
 
     if (window.htmx && typeof window.htmx.ajax === 'function') {
@@ -105,6 +165,7 @@ Board state manager
     }
   }
 
+  // Expose minimal API for globe.js (loading/error)
   window.DongriGoBoardState = {
     startLoading: showLoading,
     stopLoading: hideLoading,
@@ -137,11 +198,13 @@ Board state manager
 
   function setDim(on) {
     if (!dimEl) return;
+
     if (!mm.matches) {
       dimEl.classList.remove('on');
       dimEl.style.opacity = '';
       return;
     }
+
     if (on) dimEl.classList.add('on');
     else {
       dimEl.classList.remove('on');
@@ -188,10 +251,6 @@ Board state manager
   }
 
   function syncUiFromContent() {
-    // 닫기 직후 '/'로 밀어놓은 상태에서 늦게 도착한 swap이 보드를 다시 여는 걸 방지
-    if ((window.location.pathname || '/') === '/') {
-      closingToHome = false;
-    }
     syncReadingModeFromContent();
     syncOpenCloseFromContent();
   }
@@ -227,7 +286,12 @@ Board state manager
 
   document.body.addEventListener('htmx:beforeRequest', (e) => {
     if (!isBoardRequest(e.detail)) return;
+
     const url = extractUrl(e.detail);
+
+    // ✅ 리스트→상세 진입 tracking
+    rememberListIfGoingToDetail(url);
+
     showLoading(url);
   });
 
@@ -236,12 +300,15 @@ Board state manager
       hideLoading();
       hideError();
       syncUiFromContent();
+
+      // ✅ afterSwap 결과가 "상세"면 detailViaHtmx=1 유지,
+      // 상세가 아니면(목록/홈) 0으로 내려서 direct-entry 구분을 강화
+      const isDetail = !!boardContent.querySelector("[data-has-post='1']");
+      safeSet(KEY_DETAIL_VIA_HTMX, isDetail ? '1' : '0');
     }
   });
 
   document.body.addEventListener('htmx:historyRestore', () => {
-    // historyRestore는 swap 이후 발생하는 경우가 많지만,
-    // 보수적으로 한 번 더 동기화
     syncUiFromContent();
   });
 
@@ -267,7 +334,6 @@ Board state manager
   }
 
   function abortBoardRequests() {
-    // HTMX에 진행 중 요청이 있으면, target 쪽에서 abort 트리거
     try {
       if (window.htmx) window.htmx.trigger(boardContent, 'htmx:abort');
     } catch (_) {}
@@ -275,105 +341,70 @@ Board state manager
 
   function loadHomeIntoBoardContent() {
     if (!window.htmx || typeof window.htmx.ajax !== 'function') return;
-    // URL은 이미 pushState('/') 했으므로 push-url은 false로 둠(중복 방지)
     window.htmx.ajax('GET', '/', { target: '#boardContent', swap: 'innerHTML' });
   }
 
+  // ✅ Step A: 닫기 동작 “완전 고정”
   function closeBoard({ loadHome = true } = {}) {
-    closingToHome = true;
     abortBoardRequests();
     closeVisualOnly();
     pushHomeUrl();
     if (loadHome) loadHomeIntoBoardContent();
   }
 
-  function backWithFallback(href) {
-    const before = window.location.href;
-    try {
-      history.back();
-    } catch (_) {}
+  // ✅ Step B: direct-entry면 무조건 href로, HTMX로 들어온 상세에서만 history.back()
+  function backSmart(href) {
+    const expected = _normUrl(href);
+    if (!expected) return;
 
-    window.setTimeout(() => {
-      const after = window.location.href;
-      if (after !== before) return; // 정상적으로 뒤로 감
+    const viaHtmx = safeGet(KEY_DETAIL_VIA_HTMX) === '1';
+    if (!viaHtmx) {
+      // ✅ 직접 URL 진입(풀 페이지 로드) 포함 → history.back() 금지
+      loadHrefIntoBoard(expected);
+      return;
+    }
 
-      if (href && window.htmx && typeof window.htmx.ajax === 'function') {
-        window.htmx.ajax('GET', href, { target: '#boardContent', swap: 'innerHTML' });
-      }
-    }, 320);
+    // HTMX로 상세 들어온 케이스만 history.back() 시도 + 불일치면 복구
+    let checked = false;
+
+    const checkAndFix = () => {
+      if (checked) return;
+      checked = true;
+
+      const now = currentPathWithSearch();
+      if (now === expected) return;
+
+      loadHrefIntoBoard(expected);
+    };
+
+    const onPop = () => setTimeout(checkAndFix, 0);
+    window.addEventListener('popstate', onPop, { once: true });
+
+    try { history.back(); } catch (_) { checkAndFix(); return; }
+    setTimeout(checkAndFix, 500);
   }
 
+  // ✅ 클릭 가로채기: capture 단계에서 htmx보다 먼저 먹고(stopImmediatePropagation)
   document.addEventListener('click', (e) => {
     const a = e.target && e.target.closest ? e.target.closest('a') : null;
     if (!a) return;
 
     if (a.classList.contains('js-close')) {
       e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
       closeBoard({ loadHome: true });
       return;
     }
 
-    function _normUrl(u) {
-      try {
-        const x = new URL(u, window.location.origin);
-        return x.pathname + x.search;
-      } catch (_) {
-        return u || '';
-      }
+    if (a.classList.contains('js-back')) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      backSmart(a.getAttribute('href') || '');
+      return;
     }
-    
-    function backSmart(href) {
-      const expected = _normUrl(href);
-      if (!expected) return;
-    
-      let checked = false;
-    
-      const checkAndFix = () => {
-        if (checked) return;
-        checked = true;
-    
-        const now = (window.location.pathname || '') + (window.location.search || '');
-        if (now === expected) return; // 정상적으로 기대 목록으로 돌아감
-    
-        // 기대 목록이 아니면(=travel로 갔거나, 그대로거나) href로 강제 복귀
-        if (window.htmx && typeof window.htmx.ajax === 'function') {
-          window.htmx.ajax('GET', expected, { target: '#boardContent', swap: 'innerHTML' });
-          // URL도 기대값으로 맞춰줌(중요)
-          try { history.pushState({}, '', expected); } catch (_) {}
-        } else {
-          window.location.href = expected;
-        }
-      };
-    
-      // popstate가 오면 그 다음 틱에서 검사
-      const onPop = () => setTimeout(checkAndFix, 0);
-      window.addEventListener('popstate', onPop, { once: true });
-    
-      try {
-        history.back();
-      } catch (_) {
-        // history.back 자체가 실패하면 바로 href로
-        checkAndFix();
-        return;
-      }
-    
-      // popstate가 안 오거나(히스토리 없음), restore가 늦는 경우 대비 타임아웃 안전장치
-      setTimeout(checkAndFix, 500);
-    }
-    
-    document.addEventListener('click', (e) => {
-      const a = e.target && e.target.closest ? e.target.closest('a') : null;
-      if (!a) return;
-    
-      if (a.classList.contains('js-back')) {
-        e.preventDefault();
-        backSmart(a.getAttribute('href') || '');
-        return;
-      }
-    
-      // (js-close 등 다른 핸들러는 기존대로)
-    });    
-  });
+  }, true); // ✅ capture=true
 
   // dim click to close (mobile only)
   if (dimEl) {
@@ -515,7 +546,6 @@ Board state manager
 
   // -----------------------------
   // popstate: visual sync only
-  // (content restore is handled by htmx history)
   // -----------------------------
   function isHomePath() {
     const p = window.location.pathname || '/';
@@ -523,12 +553,12 @@ Board state manager
   }
 
   window.addEventListener('popstate', () => {
-    // 홈으로 돌아간 경우 즉시 닫아 flicker 줄이기
     if (isHomePath()) closeVisualOnly();
   });
 
   document.addEventListener('DOMContentLoaded', () => {
-    // SSR 초기 상태 동기화 (마커 기반)
+    // ✅ 핵심: "풀 페이지 로드"가 발생하면 detailViaHtmx는 무조건 0에서 시작해야 함
+    safeSet(KEY_DETAIL_VIA_HTMX, '0');
     syncUiFromContent();
   });
 
