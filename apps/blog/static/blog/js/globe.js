@@ -6,6 +6,10 @@ Globe integration (globe.gl) - TopoJSON only
 - 클릭 -> 보드 갱신: fetch(+HX-Request)
 - 매핑 충돌 해결: name/name_en/괄호영문 > aliases > ISO 키 우선순위로 덮어쓰기
 - 폴리곤 가시성 개선
+
+중요 원칙(안정성):
+- popstate/htmx history restore에서 globe.js가 #boardContent를 다시 로드(loadBoard)하지 않는다.
+  (보드 콘텐츠 복원은 HTMX history + board_state.js가 담당)
 */
 
 (function () {
@@ -78,25 +82,8 @@ Globe integration (globe.gl) - TopoJSON only
     return await res.json();
   }
 
-  function setBoardOpen(isOpen) {
-    const wrap = document.querySelector('.wrap');
-    if (!wrap) return;
-
-    if (isOpen) {
-      wrap.classList.remove('no-board');
-      wrap.classList.add('has-board');
-      wrap.dataset.hasBoard = '1';
-      document.documentElement.classList.add('board-open');
-    } else {
-      wrap.classList.remove('has-board');
-      wrap.classList.add('no-board');
-      wrap.dataset.hasBoard = '0';
-      document.documentElement.classList.remove('board-open');
-    }
-  }
-
   // ✅ 보드 갱신(fetch + HX-Request)
-  // Phase2: 보드 "껍데기(#board)"는 고정, "내용(#boardContent)"만 갱신해야 함.
+  // 주의: popstate에서 이 함수를 호출하면 “목록 눌렀는데 /<slug>/가 덮어쓰기” 같은 문제가 재발함.
   let inflight = null;
   async function loadBoard(url, opts) {
     const options = opts || {};
@@ -165,7 +152,6 @@ Globe integration (globe.gl) - TopoJSON only
     if (globeArea) globeArea.dataset.selectedCountrySlug = slug;
 
     setActiveCountryLink(slug);
-    setBoardOpen(true);
 
     const pushUrl = !(opts && opts.pushUrl === false);
     loadBoard(`/${encodeURIComponent(slug)}/`, { pushUrl });
@@ -177,15 +163,11 @@ Globe integration (globe.gl) - TopoJSON only
     const pushUrl = (options.pushUrl !== false);
     const loadHome = !!options.loadHome;
 
-    // UI state
-    setBoardOpen(false);
-
     const globeArea = document.getElementById('globeArea');
     if (globeArea) globeArea.dataset.selectedCountrySlug = '';
 
     setActiveCountryLink('');
 
-    // URL + content
     if (pushUrl) {
       try { window.history.pushState({}, '', href); } catch (_) {}
     }
@@ -208,7 +190,6 @@ Globe integration (globe.gl) - TopoJSON only
     return false;
   }
 
-  // map: key -> { slug, prio }
   const keyMap = new Map();
 
   function putKey(nameLike, slug, prio) {
@@ -239,7 +220,6 @@ Globe integration (globe.gl) - TopoJSON only
     return v ? v.slug : '';
   }
 
-  // 폴리곤에 __slug를 1회 캐싱
   function decoratePolys(polys) {
     for (const p of polys) {
       const nm = polyName(p);
@@ -256,12 +236,9 @@ Globe integration (globe.gl) - TopoJSON only
       return;
     }
 
-    // Django -> JS
     const scriptTag = document.getElementById('globeCountriesData');
     const countries = scriptTag ? JSON.parse(scriptTag.textContent || '[]') : [];
 
-    // ✅ 우선순위로 keyMap 구성
-    // prio: name_en(5) / name(4) / 괄호영문(4) / aliases(2) / iso(1)
     countries.forEach((c) => {
       if (!c || !c.slug) return;
 
@@ -285,10 +262,6 @@ Globe integration (globe.gl) - TopoJSON only
     let selectedSlug =
       document.getElementById('globeArea')?.dataset.selectedCountrySlug ||
       getSelectedSlugFromPathname();
-
-    // 초기 상태: URL에 슬러그가 있으면 보드 오픈 상태로 동기화
-    if (selectedSlug) setBoardOpen(true);
-    else setBoardOpen(false);
 
     const globe = window.Globe()(mount)
       .globeImageUrl(EARTH_TEXTURE_URL)
@@ -382,7 +355,6 @@ Globe integration (globe.gl) - TopoJSON only
         openBoardForSlug(slug, { pushUrl: true });
       });
 
-    // ✅ TopoJSON only
     try {
       const world = await fetchJson(WORLD_TOPOJSON_URL);
       const polys = window.topojson.feature(world, world.objects.countries).features;
@@ -390,52 +362,36 @@ Globe integration (globe.gl) - TopoJSON only
       decoratePolys(polys);
       globe.polygonsData(polys);
 
-      console.log('[globe] polygons loaded from topojson:', polys.length);
+      if (IS_DEV) console.log('[globe] polygons loaded from topojson:', polys.length);
     } catch (e) {
       console.error('[globe] failed to load topojson:', e);
     }
 
     setActiveCountryLink(selectedSlug);
 
-    // ✅ 뒤로가기/앞으로가기: URL 기준으로 보드 열림/닫힘 동기화
+    // ✅ popstate: 콘텐츠를 건드리지 말고, active/하이라이트만 동기화
     window.addEventListener('popstate', () => {
       const slug = getSelectedSlugFromPathname();
-
-      if (!slug) {
-        selectedSlug = '';
-        setActiveCountryLink('');
-        setBoardOpen(false);
-        loadBoard('/', { pushUrl: false }); // 홈 보드(empty state)로 동기화
-        globe.polygonCapColor(globe.polygonCapColor());
-        globe.polygonAltitude(globe.polygonAltitude());
-        return;
-      }
-
-      selectedSlug = slug;
+      selectedSlug = slug || '';
       setActiveCountryLink(selectedSlug);
-      setBoardOpen(true);
-      loadBoard(`/${encodeURIComponent(slug)}/`, { pushUrl: false });
 
       globe.polygonCapColor(globe.polygonCapColor());
       globe.polygonAltitude(globe.polygonAltitude());
     });
 
-    // Phase2: swap target이 #boardContent로 바뀌었으므로 여기 타겟도 수정
+    // ✅ boardContent swap 후에도 active/하이라이트만 동기화
     document.body.addEventListener('htmx:afterSwap', (e) => {
       if (e.target && e.target.id === 'boardContent') {
         const slug = getSelectedSlugFromPathname();
         selectedSlug = slug || '';
         setActiveCountryLink(selectedSlug);
 
-        // HTMX로 특정 국가 보드로 진입한 경우도 보드 오픈 동기화
-        setBoardOpen(!!selectedSlug);
-
         globe.polygonCapColor(globe.polygonCapColor());
         globe.polygonAltitude(globe.polygonAltitude());
       }
     });
 
-    // ✅ 외부(템플릿 JS)에서 쓰기 위한 최소 API 노출
+    // 최소 API
     window.DongriGoGlobe = window.DongriGoGlobe || {};
     window.DongriGoGlobe.loadBoard = loadBoard;
     window.DongriGoGlobe.openBoardForSlug = openBoardForSlug;

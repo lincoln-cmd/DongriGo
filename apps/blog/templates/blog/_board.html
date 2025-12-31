@@ -1,15 +1,13 @@
 {% load cld highlight %}
 
 {% if selected_country %}
-  {# 읽기모드 판별용 마커 #}
+  <div data-has-country="1" hidden></div>
   <div data-has-post="{% if selected_post %}1{% else %}0{% endif %}" hidden></div>
 
-  {# ✅ 모바일 sticky 묶음(헤더+탭+검색) #}
   <div class="board-sticky">
     <div class="board-header">
       <div>
         <h2 style="margin:0 0 8px 0; display:flex; align-items:center; gap:10px;">
-          {# 1) Cloudinary 국기 있으면 우선 표시 #}
           {% if selected_country.flag_image %}
             <img
               src="{{ selected_country.flag_image.url|cld_transform:'w_48,h_32,c_fill,q_auto,f_auto' }}"
@@ -21,22 +19,21 @@
               style="margin:0;"
             />
           {% elif selected_country.iso_a2 %}
-            {# 2) 없으면 ISO 기반 국기(span) fallback #}
             <span class="fi fi-{{ selected_country.iso_a2|lower }}" aria-label="{{ selected_country.name }}"></span>
           {% endif %}
 
           <span>{{ selected_country.name }}</span>
 
-          {# 국가 전체 게시물 수 배지(선택) #}
           {% if country_posts_total is not None %}
             <span class="hint" style="margin-left:6px;">({{ country_posts_total }})</span>
           {% endif %}
         </h2>
       </div>
+
+      {# ✅ 닫기: js-close + href="/" 고정 #}
       <a class="close-btn js-close" href="/">닫기</a>
     </div>
 
-    {# short_description 비어있으면 숨김 #}
     {% if selected_country.short_description %}
       <div class="hint">{{ selected_country.short_description }}</div>
     {% endif %}
@@ -55,7 +52,6 @@
       {% endfor %}
     </div>
 
-    {# ✅ Phase 2-5: 보드 검색 UX 래퍼(최근 검색 드롭다운) #}
     <div class="board-search-wrap">
       <form class="search"
             action="{{ category_path }}" method="get"
@@ -92,7 +88,6 @@
       </div>
     {% endif %}
   </div>
-  {# /board-sticky #}
 
   <div class="toc">
     {% for p in posts %}
@@ -140,10 +135,9 @@
     {% endfor %}
   </div>
 
-  {# pager #}
   {% if selected_post %}
     <div class="pager">
-      <a class="btn pager-back"
+      <a class="btn pager-back js-back"
          href="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}"
          hx-get="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}"
          hx-target="#boardContent"
@@ -249,6 +243,7 @@
   {% endif %}
 
 {% else %}
+  <div data-has-country="0" hidden></div>
   <div data-has-post="0" hidden></div>
 
   <div class="board-empty">
