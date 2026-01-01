@@ -239,6 +239,7 @@ Globe integration (globe.gl) - TopoJSON only
     const scriptTag = document.getElementById('globeCountriesData');
     const countries = scriptTag ? JSON.parse(scriptTag.textContent || '[]') : [];
 
+    // prio: name_en(5) / name(4) / 괄호영문(4) / aliases(2) / iso(1)
     countries.forEach((c) => {
       if (!c || !c.slug) return;
 
@@ -355,6 +356,7 @@ Globe integration (globe.gl) - TopoJSON only
         openBoardForSlug(slug, { pushUrl: true });
       });
 
+    // ✅ TopoJSON only
     try {
       const world = await fetchJson(WORLD_TOPOJSON_URL);
       const polys = window.topojson.feature(world, world.objects.countries).features;
