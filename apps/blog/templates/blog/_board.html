@@ -41,8 +41,8 @@
     <div class="tabs">
       {% for key,label,cat_slug in tabs %}
         <a class="{% if selected_category == key %}active{% endif %}"
-           href="/{{ selected_country.slug }}/{{ cat_slug }}/?page=1{% if q %}&q={{ q|urlencode }}{% endif %}"
-           hx-get="/{{ selected_country.slug }}/{{ cat_slug }}/?page=1{% if q %}&q={{ q|urlencode }}{% endif %}"
+           href="/{{ selected_country.slug }}/{{ cat_slug }}/?page=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+           hx-get="/{{ selected_country.slug }}/{{ cat_slug }}/?page=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
            hx-target="#boardContent"
            hx-swap="innerHTML"
            hx-indicator=".htmx-indicator"
@@ -52,35 +52,59 @@
       {% endfor %}
     </div>
 
-    <div class="board-search-wrap">
-      <form class="search"
+    <div class="board-controls">
+      <div class="board-search-wrap">
+        <form class="search"
+              action="{{ category_path }}" method="get"
+              hx-get="{{ category_path }}"
+              hx-target="#boardContent"
+              hx-swap="innerHTML"
+              hx-indicator=".htmx-indicator"
+              hx-push-url="true"
+              autocomplete="off">
+          <input class="search-input" type="text" name="q" value="{{ q|default:'' }}"
+                 placeholder="글 제목/본문 검색" />
+          <input type="hidden" name="page" value="1" />
+          {% if sort and sort != 'new' %}
+            <input type="hidden" name="sort" value="{{ sort }}" />
+          {% endif %}
+          <button class="search-btn" type="submit">검색</button>
+        </form>
+
+        <div class="search-suggest" data-search-suggest hidden aria-hidden="true">
+          <div class="search-suggest__head">
+            <span class="hint">최근 검색</span>
+            <button class="search-suggest__clear" type="button" data-search-clear>지우기</button>
+          </div>
+          <div class="search-suggest__list" data-search-list></div>
+        </div>
+      </div>
+
+      <form class="board-sort"
             action="{{ category_path }}" method="get"
             hx-get="{{ category_path }}"
             hx-target="#boardContent"
             hx-swap="innerHTML"
             hx-indicator=".htmx-indicator"
-            hx-push-url="true"
-            autocomplete="off">
-        <input class="search-input" type="text" name="q" value="{{ q|default:'' }}"
-               placeholder="글 제목/본문 검색" />
+            hx-push-url="true">
         <input type="hidden" name="page" value="1" />
-        <button class="search-btn" type="submit">검색</button>
+        {% if q %}
+          <input type="hidden" name="q" value="{{ q }}" />
+        {% endif %}
+        <label class="hint" for="boardSortSelect" style="white-space:nowrap;">정렬</label>
+        <select id="boardSortSelect" name="sort" onchange="this.form.requestSubmit();">
+          {% for v, label in sort_options %}
+            <option value="{{ v }}" {% if sort == v %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
       </form>
-
-      <div class="search-suggest" data-search-suggest hidden aria-hidden="true">
-        <div class="search-suggest__head">
-          <span class="hint">최근 검색</span>
-          <button class="search-suggest__clear" type="button" data-search-clear>지우기</button>
-        </div>
-        <div class="search-suggest__list" data-search-list></div>
-      </div>
     </div>
 
     {% if q %}
       <div style="margin-top:8px;">
         <a class="hint"
-           href="{{ category_path }}?page=1"
-           hx-get="{{ category_path }}?page=1"
+           href="{{ category_path }}?page=1{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+           hx-get="{{ category_path }}?page=1{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
            hx-target="#boardContent"
            hx-swap="innerHTML"
            hx-indicator=".htmx-indicator"
@@ -92,8 +116,8 @@
   <div class="toc">
     {% for p in posts %}
       <a class="toc-link {% if selected_post and selected_post.slug == p.slug %}active{% endif %}"
-         href="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}"
-         hx-get="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}"
+         href="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+         hx-get="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
          hx-target="#boardContent"
          hx-swap="innerHTML"
          hx-indicator=".htmx-indicator"
@@ -107,8 +131,8 @@
           <div class="hint">다른 키워드로 검색하거나, 검색을 해제해 보세요.</div>
           <div class="board-emptyactions">
             <a class="btn"
-               href="{{ category_path }}?page=1"
-               hx-get="{{ category_path }}?page=1"
+               href="{{ category_path }}?page=1{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+               hx-get="{{ category_path }}?page=1{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
                hx-target="#boardContent"
                hx-swap="innerHTML"
                hx-indicator=".htmx-indicator"
@@ -138,8 +162,8 @@
   {% if selected_post %}
     <div class="pager">
       <a class="btn pager-back js-back"
-         href="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}"
-         hx-get="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}"
+         href="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+         hx-get="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
          hx-target="#boardContent"
          hx-swap="innerHTML"
          hx-indicator=".htmx-indicator"
@@ -148,8 +172,8 @@
       {% if page_obj and page_obj.paginator.num_pages > 1 %}
         <div class="pager-nav">
           {% if page_obj.has_previous %}
-            <a href="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
-               hx-get="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
+            <a href="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+               hx-get="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
                hx-target="#boardContent" hx-swap="innerHTML"
                hx-indicator=".htmx-indicator" hx-push-url="true">이전</a>
           {% else %}
@@ -159,8 +183,8 @@
           <span class="hint">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
 
           {% if page_obj.has_next %}
-            <a href="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
-               hx-get="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
+            <a href="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+               hx-get="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
                hx-target="#boardContent" hx-swap="innerHTML"
                hx-indicator=".htmx-indicator" hx-push-url="true">다음</a>
           {% else %}
@@ -174,8 +198,8 @@
     <div class="pager">
       <div class="pager-nav">
         {% if page_obj.has_previous %}
-          <a href="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
-             hx-get="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
+          <a href="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+             hx-get="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
              hx-target="#boardContent" hx-swap="innerHTML"
              hx-indicator=".htmx-indicator" hx-push-url="true">이전</a>
         {% else %}
@@ -185,8 +209,8 @@
         <span class="hint">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
 
         {% if page_obj.has_next %}
-          <a href="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
-             hx-get="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
+          <a href="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+             hx-get="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
              hx-target="#boardContent" hx-swap="innerHTML"
              hx-indicator=".htmx-indicator" hx-push-url="true">다음</a>
         {% else %}
