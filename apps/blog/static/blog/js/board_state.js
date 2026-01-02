@@ -1,13 +1,34 @@
+/*
+Board state manager
+- Loading overlay + Error overlay
+- Single source of truth for:
+  - open/close based on markers in #boardContent
+  - reading mode
+  - close (js-close): close UI + pushState('/') + (optional) load home via HTMX
+  - back (js-back): history.back() preferred ONLY when detail was entered via HTMX; otherwise load href
+  - mobile dim + swipe close
+  - URL sync on popstate (visual only)
+
+[2026-01] Patch:
+- Allow "board-open" screens that are NOT country-based (e.g. /tags/)
+  => open board when:
+     1) data-has-country="1" OR
+     2) data-board-open="1" OR
+     3) location path is /tags or /tags/<slug> (fallback when marker missing)
+*/
+
 (function () {
   'use strict';
 
   const wrap = document.querySelector('.wrap');
   const board = document.getElementById('board');
   const boardContent = document.getElementById('boardContent');
+
   const loadingEl = document.getElementById('boardLoading');
   const errorEl = document.getElementById('boardError');
   const retryBtn = document.getElementById('boardRetryBtn');
 
+  // (optional) richer error UI elements (if exist)
   const errorMsgEl = document.getElementById('boardErrorMsg');
   const errorMetaEl = document.getElementById('boardErrorMeta');
 
@@ -19,14 +40,13 @@
   if (!wrap || !board || !boardContent) return;
 
   let lastUrl = '';
-  let autoRetryArmed = false;
 
+  // --------------------------------
+  // Step B support: direct-entry safe back
+  // --------------------------------
   const KEY_LAST_LIST_URL   = 'DG:lastListUrl';
   const KEY_LAST_DETAIL_URL = 'DG:lastDetailUrl';
   const KEY_DETAIL_VIA_HTMX = 'DG:detailViaHtmx';
-
-  const KEY_LAST_BOARD_URL      = 'DG:lastBoardUrl';
-  const KEY_LAST_GOOD_BOARD_URL = 'DG:lastGoodBoardUrl';
 
   function safeGet(key) {
     try { return sessionStorage.getItem(key) || ''; } catch (_) { return ''; }
@@ -48,6 +68,7 @@
     }
   }
 
+  // 기대 라우트: /<country>/<category>/<post>/ (세그먼트 3개 이상이면 상세로 간주)
   function _isPostDetailUrl(u) {
     const norm = _normUrl(u);
     const path = (norm.split('?')[0] || '').toString();
@@ -72,9 +93,13 @@
 
     safeSet(KEY_LAST_LIST_URL, cur);
     safeSet(KEY_LAST_DETAIL_URL, detail);
+
     safeSet(KEY_DETAIL_VIA_HTMX, '1');
   }
 
+  // --------------------------------
+  // overlays
+  // --------------------------------
   function setHidden(el, hidden) {
     if (!el) return;
     if (hidden) {
@@ -86,17 +111,122 @@
     }
   }
 
-  function setText(el, text) {
-    if (!el) return;
-    el.textContent = text || '';
+  function setErrorMessage({ url, status }) {
+    if (!errorMsgEl && !errorMetaEl) return;
+
+    const offline = (typeof navigator !== 'undefined' && navigator.onLine === false);
+
+    if (errorMsgEl) {
+      if (offline) {
+        errorMsgEl.textContent = '인터넷 연결이 끊겼습니다. 연결 상태를 확인해 주세요.';
+      } else if (status && status !== 0) {
+        errorMsgEl.textContent = '서버 오류로 요청이 실패했습니다. 잠시 후 다시 시도해 주세요.';
+      } else {
+        errorMsgEl.textContent = '네트워크 또는 서버 오류로 요청이 실패했습니다.';
+      }
+    }
+
+    if (errorMetaEl) {
+      const parts = [];
+      if (offline) parts.push('offline');
+      if (status && status !== 0) parts.push(`HTTP ${status}`);
+      if (url) parts.push(_normUrl(url));
+      const txt = parts.join(' · ');
+      if (txt) {
+        errorMetaEl.textContent = txt;
+        errorMetaEl.removeAttribute('aria-hidden');
+      } else {
+        errorMetaEl.textContent = '';
+        errorMetaEl.setAttribute('aria-hidden', 'true');
+      }
+    }
   }
 
-  function setDisabled(el, disabled) {
-    if (!el) return;
-    if (disabled) el.setAttribute('disabled', '');
-    else el.removeAttribute('disabled');
+  function showLoading(url) {
+    if (url) lastUrl = url;
+    setHidden(errorEl, true);
+    setHidden(loadingEl, false);
   }
 
+  function hideLoading() {
+    setHidden(loadingEl, true);
+  }
+
+  function showError(url, meta = {}) {
+    if (url) lastUrl = url;
+    hideLoading();
+    setErrorMessage({ url, status: meta.status || 0 });
+    setHidden(errorEl, false);
+  }
+
+  function hideError() {
+    setHidden(errorEl, true);
+  }
+
+  async function retry() {
+    const url = lastUrl || currentPathWithSearch();
+    if (!url) return;
+
+    if (window.htmx && typeof window.htmx.ajax === 'function') {
+      hideError();
+      showLoading(url);
+      try {
+        window.htmx.ajax('GET', url, { target: '#boardContent', swap: 'innerHTML' });
+      } catch (_) {
+        showError(url, { status: 0 });
+      }
+      return;
+    }
+
+    hideError();
+    showLoading(url);
+
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'HX-Request': 'true', 'X-Requested-With': 'XMLHttpRequest' },
+        cache: 'no-store'
+      });
+
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+
+      const html = await res.text();
+      boardContent.innerHTML = html;
+
+      if (window.htmx && typeof window.htmx.process === 'function') {
+        window.htmx.process(boardContent);
+      }
+
+      hideLoading();
+
+      const evt = new CustomEvent('htmx:afterSwap', { bubbles: true });
+      boardContent.dispatchEvent(evt);
+
+    } catch (_) {
+      showError(url, { status: 0 });
+    }
+  }
+
+  // Expose minimal API for globe.js (loading/error)
+  window.DongriGoBoardState = {
+    startLoading: showLoading,
+    stopLoading: hideLoading,
+    showError: (url, meta) => showError(url, meta || {}),
+    hideError: hideError,
+    setLastUrl: (u) => { lastUrl = u || lastUrl; },
+    retry: retry,
+  };
+
+  if (retryBtn) {
+    retryBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      retry();
+    });
+  }
+
+  // -----------------------------
+  // UI state (single source)
+  // -----------------------------
   function isBoardOpen() {
     return wrap.classList.contains('has-board');
   }
@@ -150,179 +280,34 @@
     window.setTimeout(() => wrap.classList.remove('closing'), 260);
   }
 
-  function ensureBoardVisible() {
-    openVisualOnly();
-  }
-
-  function renderErrorMessage(url, info) {
-    const online = (typeof navigator !== 'undefined') ? navigator.onLine : true;
-    const status = info && typeof info.status === 'number' ? info.status : 0;
-
-    if (!online) {
-      setText(errorMsgEl, '인터넷 연결이 끊겼습니다. 연결 상태를 확인해 주세요.');
-      setText(errorMetaEl, '온라인 상태로 전환되면 자동으로 1회 재시도합니다.');
-      setDisabled(retryBtn, true);
-      return;
-    }
-
-    setDisabled(retryBtn, false);
-
-    if (status === 404) {
-      setText(errorMsgEl, '요청한 콘텐츠를 찾을 수 없습니다.');
-      setText(errorMetaEl, `HTTP ${status} · ${_normUrl(url)}`);
-      return;
-    }
-
-    if (status >= 500) {
-      setText(errorMsgEl, '서버 오류로 요청이 실패했습니다. 잠시 후 다시 시도해 주세요.');
-      setText(errorMetaEl, `HTTP ${status} · ${_normUrl(url)}`);
-      return;
-    }
-
-    if (status === 0) {
-      setText(errorMsgEl, '네트워크 또는 서버 오류로 요청이 실패했습니다.');
-      setText(errorMetaEl, _normUrl(url));
-      return;
-    }
-
-    setText(errorMsgEl, '요청이 실패했습니다. 다시 시도해 주세요.');
-    setText(errorMetaEl, `HTTP ${status} · ${_normUrl(url)}`);
-  }
-
-  function showLoading(url) {
-    if (url) {
-      lastUrl = url;
-      safeSet(KEY_LAST_BOARD_URL, _normUrl(url));
-    }
-    ensureBoardVisible();
-    setHidden(errorEl, true);
-    setHidden(loadingEl, false);
-  }
-
-  function hideLoading() {
-    setHidden(loadingEl, true);
-  }
-
-  function showError(url, info) {
-    const u = url || lastUrl || safeGet(KEY_LAST_BOARD_URL) || currentPathWithSearch();
-    lastUrl = u;
-    safeSet(KEY_LAST_BOARD_URL, _normUrl(u));
-
-    ensureBoardVisible();
-
-    hideLoading();
-    renderErrorMessage(u, info || {});
-    setHidden(errorEl, false);
-
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      autoRetryArmed = true;
-    }
-  }
-
-  function hideError() {
-    setHidden(errorEl, true);
-    setDisabled(retryBtn, false);
-    setText(errorMetaEl, '');
-  }
-
-  async function retry() {
-    const url =
-      lastUrl ||
-      safeGet(KEY_LAST_BOARD_URL) ||
-      currentPathWithSearch();
-
-    if (!url) return;
-
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      showError(url, { status: 0 });
-      return;
-    }
-
-    if (window.htmx && typeof window.htmx.ajax === 'function') {
-      hideError();
-      showLoading(url);
-      try {
-        window.htmx.ajax('GET', url, { target: '#boardContent', swap: 'innerHTML' });
-      } catch (_) {
-        showError(url, { status: 0 });
-      }
-      return;
-    }
-
-    hideError();
-    showLoading(url);
-
-    try {
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: { 'HX-Request': 'true', 'X-Requested-With': 'XMLHttpRequest' },
-        cache: 'no-store'
-      });
-
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-
-      const html = await res.text();
-      boardContent.innerHTML = html;
-
-      if (window.htmx && typeof window.htmx.process === 'function') {
-        window.htmx.process(boardContent);
-      }
-
-      hideLoading();
-
-      const evt = new CustomEvent('htmx:afterSwap', { bubbles: true });
-      boardContent.dispatchEvent(evt);
-
-    } catch (e) {
-      const msg = (e && e.message) ? e.message : '';
-      const m = msg.match(/HTTP\s+(\d+)/i);
-      const status = m ? parseInt(m[1], 10) : 0;
-      showError(url, { status: Number.isFinite(status) ? status : 0 });
-    }
-  }
-
-  window.DongriGoBoardState = {
-    startLoading: showLoading,
-    stopLoading: hideLoading,
-    showError: showError,
-    hideError: hideError,
-    setLastUrl: (u) => { lastUrl = u || lastUrl; safeSet(KEY_LAST_BOARD_URL, _normUrl(lastUrl)); },
-    retry: retry,
-  };
-
-  if (retryBtn) {
-    retryBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      retry();
-    });
-  }
-
-  window.addEventListener('online', () => {
-    setDisabled(retryBtn, false);
-
-    const isErrorVisible = errorEl && !errorEl.hasAttribute('hidden');
-    if (!isErrorVisible) return;
-    if (!autoRetryArmed) return;
-
-    autoRetryArmed = false;
-    retry();
-  });
-
-  window.addEventListener('offline', () => {
-    const isErrorVisible = errorEl && !errorEl.hasAttribute('hidden');
-    if (!isErrorVisible) return;
-    showError(lastUrl || safeGet(KEY_LAST_BOARD_URL) || currentPathWithSearch(), { status: 0 });
-  });
-
   function syncReadingModeFromContent() {
     const marker = boardContent.querySelector("[data-has-post='1']");
     if (marker) board.classList.add('reading');
     else board.classList.remove('reading');
   }
 
-  function syncOpenCloseFromContent() {
+  function isTagsPathFromLocation() {
+    const p = (window.location.pathname || '/').toString();
+    // /tags/ , /tags/<slug>/ ... (fallback if template marker missing)
+    return /^\/tags(\/|$)/.test(p);
+  }
+
+  function shouldBoardBeOpenFromContentOrUrl() {
     const hasCountry = !!boardContent.querySelector("[data-has-country='1']");
-    if (hasCountry) openVisualOnly();
+    if (hasCountry) return true;
+
+    // ✅ New marker: non-country boards (tags etc.)
+    const boardOpen = !!boardContent.querySelector("[data-board-open='1']");
+    if (boardOpen) return true;
+
+    // ✅ Fallback by URL for /tags/ (prevents “request succeeds but board stays closed”)
+    if (isTagsPathFromLocation()) return true;
+
+    return false;
+  }
+
+  function syncOpenCloseFromContent() {
+    if (shouldBoardBeOpenFromContentOrUrl()) openVisualOnly();
     else closeVisualOnly();
   }
 
@@ -331,6 +316,9 @@
     syncOpenCloseFromContent();
   }
 
+  // -----------------------------
+  // HTMX hooks (boardContent only)
+  // -----------------------------
   function isBoardRequest(detail) {
     if (!detail) return false;
 
@@ -363,11 +351,10 @@
     const url = extractUrl(e.detail);
     rememberListIfGoingToDetail(url);
 
-    // ✅ 핵심: 오프라인이면 HTMX 요청 자체를 취소해야 Network에 실패 XHR이 안 뜸
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      try { e.preventDefault(); } catch (_) {}
-      showError(url, { status: 0 });
-      return;
+    // ✅ If requesting something other than '/', open board immediately to avoid "nothing happens" feeling
+    const norm = _normUrl(url);
+    if (norm && norm !== '/' && norm !== '/?') {
+      openVisualOnly();
     }
 
     showLoading(url);
@@ -381,10 +368,6 @@
 
       const isDetail = !!boardContent.querySelector("[data-has-post='1']");
       safeSet(KEY_DETAIL_VIA_HTMX, isDetail ? '1' : '0');
-
-      safeSet(KEY_LAST_GOOD_BOARD_URL, currentPathWithSearch());
-      safeSet(KEY_LAST_BOARD_URL, currentPathWithSearch());
-      lastUrl = currentPathWithSearch();
     }
   });
 
@@ -394,18 +377,24 @@
 
   function onHtmxError(e) {
     if (!isBoardRequest(e.detail)) return;
-
     const url = extractUrl(e.detail);
-    const xhr = e.detail && e.detail.xhr ? e.detail.xhr : null;
-    const status = xhr && typeof xhr.status === 'number' ? xhr.status : 0;
 
-    showError(url, { status });
+    // ✅ If error occurred while loading non-home content, keep board open so error overlay is visible
+    const norm = _normUrl(url);
+    if (norm && norm !== '/' && norm !== '/?') {
+      openVisualOnly();
+    }
+
+    showError(url, { status: 0 });
   }
 
   document.body.addEventListener('htmx:responseError', onHtmxError);
   document.body.addEventListener('htmx:sendError', onHtmxError);
   document.body.addEventListener('htmx:timeout', onHtmxError);
 
+  // -----------------------------
+  // Close / Back actions
+  // -----------------------------
   function pushHomeUrl() {
     try {
       if ((window.location.pathname || '/') !== '/') {
@@ -482,6 +471,7 @@
     }
   }, true);
 
+  // dim click to close (mobile only)
   if (dimEl) {
     dimEl.addEventListener('click', (e) => {
       if (!mm.matches) return;
@@ -491,6 +481,9 @@
     });
   }
 
+  // -----------------------------
+  // Swipe close (edge only, mobile)
+  // -----------------------------
   function snapTo(x, ms) {
     board.style.transition = `transform ${ms}ms ease`;
     board.style.transform = `translateX(${x}px)`;
@@ -512,7 +505,7 @@
 
   let prevX = 0;
   let prevT = 0;
-  let lastV = 0;
+  let lastV = 0; // px/ms
 
   function resetDrag() {
     dragging = false;
@@ -616,22 +609,35 @@
     });
   }
 
+  // -----------------------------
+  // popstate: visual sync only
+  // -----------------------------
   function isHomePath() {
     const p = window.location.pathname || '/';
     return p === '/';
   }
 
   window.addEventListener('popstate', () => {
-    if (isHomePath()) closeVisualOnly();
+    // ✅ DO NOT load content here (stability rule)
+    if (isHomePath()) {
+      closeVisualOnly();
+      return;
+    }
+
+    // ✅ For /tags/... ensure board is visible even if marker missing
+    if (isTagsPathFromLocation()) {
+      openVisualOnly();
+      return;
+    }
+
+    // otherwise, rely on content markers
+    syncUiFromContent();
   });
 
   document.addEventListener('DOMContentLoaded', () => {
+    // 풀 페이지 로드 시작점에서는 "HTMX 상세 진입"을 0으로 초기화
     safeSet(KEY_DETAIL_VIA_HTMX, '0');
     syncUiFromContent();
-
-    const cur = currentPathWithSearch();
-    safeSet(KEY_LAST_BOARD_URL, cur);
-    lastUrl = cur;
   });
 
 })();

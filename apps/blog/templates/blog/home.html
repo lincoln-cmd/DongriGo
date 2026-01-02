@@ -12,21 +12,21 @@
   <link rel="stylesheet" href="{% static 'blog/css/codehilite_extra.css' %}">
   <link rel="stylesheet" href="{% static 'blog/css/site.css' %}">
 
-  <!-- (이미 존재한다면 유지) 게시물 정렬 UI -->
+  <!-- 게시물 정렬 UI -->
   <link rel="stylesheet" href="{% static 'blog/css/board_sort.css' %}">
 
-  <!-- Phase 3 (최소): 태그 UI -->
-  <link rel="stylesheet" href="{% static 'blog/css/board_tags.css' %}">
-
-  <!-- ✅ 신규: 로딩/실패 UX 보강 -->
+  <!-- ✅ 로딩/실패 UX -->
   <link rel="stylesheet" href="{% static 'blog/css/board_feedback.css' %}">
+
+  <!-- ✅ Phase 3: tags board -->
+  <link rel="stylesheet" href="{% static 'blog/css/board_tags.css' %}">
 
   <link rel="stylesheet" href="{% static 'blog/vendor/flag-icons/css/flag-icons.min.css' %}">
 </head>
 
 <body>
-  <div class="wrap {% if selected_country %}has-board{% else %}no-board{% endif %}"
-       data-has-board="{% if selected_country %}1{% else %}0{% endif %}">
+  <div class="wrap {% if selected_country or board_view == 'tags' %}has-board{% else %}no-board{% endif %}"
+       data-has-board="{% if selected_country or board_view == 'tags' %}1{% else %}0{% endif %}">
 
     <!-- LEFT: Globe -->
     <div class="globe" id="globeArea"
@@ -36,7 +36,21 @@
 
         <div class="globe-overlay" aria-label="Globe controls">
           <div class="overlay-inner">
-            <div class="globe-title">Dongri Go</div>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+              <div class="globe-title">Dongri Go</div>
+
+              <!-- ✅ Tag board entry -->
+              <a class="hint"
+                 href="/tags/"
+                 hx-get="/tags/"
+                 hx-target="#boardContent"
+                 hx-swap="innerHTML"
+                 hx-indicator=".htmx-indicator"
+                 hx-push-url="true"
+                 style="text-decoration:none; padding:6px 10px; border:1px solid rgba(255,255,255,.12); border-radius:10px;">
+                태그
+              </a>
+            </div>
 
             <div class="search-wrap">
               <input id="countrySearch" class="country-search" type="text"
@@ -80,7 +94,11 @@
       <div class="board-swipe-edge" id="boardSwipeEdge" aria-hidden="true"></div>
 
       <div id="boardContent" class="board-content" hx-history-elt>
-        {% include "blog/_board.html" %}
+        {% if board_view == "tags" %}
+          {% include "blog/_board_tags.html" %}
+        {% else %}
+          {% include "blog/_board.html" %}
+        {% endif %}
       </div>
 
       <!-- Loading overlay (skeleton) -->
@@ -123,8 +141,6 @@
       <div class="board-overlay board-overlay--error" id="boardError" hidden aria-hidden="true" role="alert">
         <div class="board-error-box">
           <div class="board-error-title">보드를 불러오지 못했습니다</div>
-
-          <!-- ✅ JS가 상황(오프라인/HTTP status)에 따라 교체 -->
           <div class="hint" id="boardErrorMsg">네트워크 또는 서버 오류로 요청이 실패했습니다.</div>
           <div class="hint board-error-meta" id="boardErrorMeta" aria-hidden="true"></div>
 
