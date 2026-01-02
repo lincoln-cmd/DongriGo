@@ -42,6 +42,21 @@ def resolve_selected_category(category_slug: str | None):
     return cat, inv.get(cat, "travel")
 
 
+def resolve_sort(sort_key: str | None):
+    """정렬 옵션(보수적): 허용된 값만 인정하고, 그 외는 기본값으로 강제."""
+    key = (sort_key or "new").strip().lower()
+    allowed = {"new", "old", "title"}
+    if key not in allowed:
+        key = "new"
+
+    options = [
+        ("new", "최신"),
+        ("old", "오래된"),
+        ("title", "제목"),
+    ]
+    return key, options
+
+
 def is_htmx(request) -> bool:
     return (
         request.headers.get("HX-Request") == "true"
@@ -146,6 +161,9 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
 
     selected_category, selected_category_slug = resolve_selected_category(category_slug)
 
+    # Phase 2: 목록 정렬 옵션(보수적: 허용된 값만 적용)
+    sort_key, sort_options = resolve_sort(request.GET.get("sort"))
+
     q = (request.GET.get("q") or "").strip()
     is_searching = bool(q)
 
@@ -170,7 +188,12 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
     if is_searching:
         posts_qs = posts_qs.filter(Q(title__icontains=q) | Q(content__icontains=q))
 
-    posts_qs = posts_qs.order_by("-published_at", "-created_at", "-id")
+    if sort_key == "old":
+        posts_qs = posts_qs.order_by("published_at", "created_at", "id")
+    elif sort_key == "title":
+        posts_qs = posts_qs.order_by("title", "id")
+    else:
+        posts_qs = posts_qs.order_by("-published_at", "-created_at", "-id")
 
     paginator = Paginator(posts_qs, 10)
     page_obj = paginator.get_page(request.GET.get("page") or "1")
@@ -253,6 +276,10 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
         "gallery_images": gallery_images,
         "q": q,
         "is_searching": is_searching,
+
+        # Phase 2: sort option
+        "sort": sort_key,
+        "sort_options": sort_options,
 
         # Phase 2-2 (Empty state UX)
         "country_posts_total": country_posts_total,

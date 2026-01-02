@@ -1,0 +1,42 @@
+/* board_sort.css
+   - Board controls (Search + Sort)
+   - Kept separate to avoid editing the large site.css.
+*/
+
+.board-controls{
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.board-controls .board-search-wrap{
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.board-sort{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.board-sort select{
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #333;
+  background: #0b0b0b;
+  color: #fff;
+  outline: none;
+}
+
+@media (max-width: 640px){
+  .board-controls{
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .board-sort{
+    justify-content: flex-end;
+  }
+}
