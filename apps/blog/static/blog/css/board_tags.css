@@ -1,39 +1,86 @@
-/* Phase 3 (minimal): Tag UI for board */
+/* Phase 3: Tag board (minimal, safe) */
 
-.board-active-filters {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
+.tags-title {
+    margin: 0 0 8px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
-.post-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 10px 0;
+.tags-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 6px;
 }
 
-.tag-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 5px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.88);
-  font-size: 12px;
-  line-height: 1;
-  text-decoration: none;
+.tags-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.tag-chip:hover {
-  border-color: rgba(255,255,255,0.22);
-  background: rgba(255,255,255,0.10);
+.tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 0;
 }
 
-.tag-chip--active {
-  border-color: rgba(255,255,255,0.22);
-  background: rgba(255,255,255,0.12);
-  color: rgba(255,255,255,0.92);
+.tag-chip-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    padding: 8px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.10);
+    background: rgba(255,255,255,.03);
+}
+
+    .tag-chip-link:hover {
+        background: rgba(255,255,255,.06);
+    }
+
+.tag-chip,
+.tags-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.14);
+    background: rgba(255,255,255,.06);
+    font-weight: 600;
+}
+
+.tags-posts {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 0;
+}
+
+.tag-post-link {
+    display: block;
+    text-decoration: none;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.10);
+    background: rgba(255,255,255,.03);
+}
+
+    .tag-post-link:hover {
+        background: rgba(255,255,255,.06);
+    }
+
+.tag-post-title {
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.tag-post-meta {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
 }
