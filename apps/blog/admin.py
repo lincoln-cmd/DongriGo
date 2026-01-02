@@ -6,7 +6,7 @@ from django.utils.safestring import mark_safe
 from django import forms
 from django.core.exceptions import ValidationError
 
-from .models import Country, Post, PostImage
+from .models import Country, Post, PostImage, Tag
 try:
     from .models import PostSlugHistory
 except Exception:
@@ -71,6 +71,19 @@ class PostAdminForm(forms.ModelForm):
         return (self.cleaned_data.get("slug") or "").strip()
 
 
+@admin.register(Tag)
+class TagAdmin(admin.ModelAdmin):
+    """
+    ✅ Tag는 created_at 없이 최소 운영
+    - created_at 정렬/표시 금지(현재 DB 에러 원인 제거)
+    """
+    list_display = ("name", "slug")
+    search_fields = ("name", "slug")
+    ordering = ("name",)
+    prepopulated_fields = {"slug": ("name",)}
+    list_per_page = 50
+
+
 @admin.register(Country)
 class CountryAdmin(admin.ModelAdmin):
     form = CountryAdminForm
@@ -105,11 +118,6 @@ class CountryAdmin(admin.ModelAdmin):
     posts_count.admin_order_field = "posts_total"
 
     def data_warnings(self, obj: Country):
-        """
-        ✅ Django 6.0 주의:
-        - format_html()는 args/kwargs 없이 호출하면 TypeError 발생
-        - 단순 HTML 리턴은 mark_safe() 사용
-        """
         issues = []
         if obj.iso_a2 and len(obj.iso_a2) != 2:
             issues.append("iso_a2")
@@ -301,18 +309,20 @@ class PostAdmin(admin.ModelAdmin):
         "cover_preview",
         "view_on_site_link",
     )
-    list_filter = ("country", "category", "is_published")
-    search_fields = ("title", "slug", "content")
+    list_filter = ("country", "category", "is_published", "tags")
+    search_fields = ("title", "slug", "content", "tags__name", "tags__slug")
     ordering = ("-published_at", "-created_at", "-id")
     list_per_page = 50
 
     autocomplete_fields = ("country",)
+    filter_horizontal = ("tags",)
+
     inlines = [PostImageInline]
 
     actions = ("action_publish", "action_unpublish")
 
     fieldsets = (
-        ("기본", {"fields": ("country", "category", "title", "slug")}),
+        ("기본", {"fields": ("country", "category", "title", "slug", "tags")}),
         ("콘텐츠", {"fields": ("content", "rendered_preview")}),
         ("미디어", {"fields": ("cover_image",)}),
         ("발행", {"fields": ("is_published", "published_at")}),
@@ -344,7 +354,7 @@ class PostAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.annotate(images_total=Count("images", distinct=True)).prefetch_related("images")
+        return qs.annotate(images_total=Count("images", distinct=True)).prefetch_related("images", "tags")
 
     def images_count(self, obj: Post):
         return getattr(obj, "images_total", 0)
@@ -373,10 +383,10 @@ class PostAdmin(admin.ModelAdmin):
     def rendered_preview(self, obj: Post):
         if not obj or not obj.pk:
             return "저장 후 미리보기가 표시됩니다."
-        html = obj.rendered_content()
+        html2 = obj.rendered_content()
         return format_html(
             '<div style="max-height:280px;overflow:auto;border:1px solid #ddd;padding:10px;border-radius:8px;">{}</div>',
-            mark_safe(html),
+            mark_safe(html2),
         )
     rendered_preview.short_description = "본문 미리보기"
 
@@ -423,7 +433,6 @@ class PostAdmin(admin.ModelAdmin):
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
 
-        # ✅ order 자동 정렬 보정: 10 단위로 띄워서 저장(중복/0 방지)
         obj: Post = form.instance
         imgs = list(obj.images.order_by("order", "id"))
         changed2 = False
