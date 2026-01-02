@@ -1,0 +1,29 @@
+/* board_feedback.css
+   - Error overlay message/meta polish
+   - Conservative: only affects error overlay elements.
+*/
+
+#boardErrorMsg{
+  margin-top: 8px;
+  line-height: 1.45;
+}
+
+.board-error-meta{
+  margin-top: 8px;
+  opacity: 0.85;
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.board-error-actions{
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.board-error-actions .btn[disabled]{
+  opacity: 0.55;
+  cursor: not-allowed;
+}

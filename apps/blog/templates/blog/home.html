@@ -11,7 +11,13 @@
   <link rel="stylesheet" href="{% static 'blog/css/pygments.css' %}">
   <link rel="stylesheet" href="{% static 'blog/css/codehilite_extra.css' %}">
   <link rel="stylesheet" href="{% static 'blog/css/site.css' %}">
+
+  <!-- (이미 존재한다면 유지) 게시물 정렬 UI -->
   <link rel="stylesheet" href="{% static 'blog/css/board_sort.css' %}">
+
+  <!-- ✅ 신규: 로딩/실패 UX 보강 -->
+  <link rel="stylesheet" href="{% static 'blog/css/board_feedback.css' %}">
+
   <link rel="stylesheet" href="{% static 'blog/vendor/flag-icons/css/flag-icons.min.css' %}">
 </head>
 
@@ -68,7 +74,6 @@
 
     <!-- RIGHT: Board (stable shell + swappable content) -->
     <div class="board" id="board">
-      <!-- swipe edge handle -->
       <div class="board-swipe-edge" id="boardSwipeEdge" aria-hidden="true"></div>
 
       <div id="boardContent" class="board-content" hx-history-elt>
@@ -115,7 +120,11 @@
       <div class="board-overlay board-overlay--error" id="boardError" hidden aria-hidden="true" role="alert">
         <div class="board-error-box">
           <div class="board-error-title">보드를 불러오지 못했습니다</div>
-          <div class="hint">네트워크 또는 서버 오류로 요청이 실패했습니다.</div>
+
+          <!-- ✅ JS가 상황(오프라인/HTTP status)에 따라 교체 -->
+          <div class="hint" id="boardErrorMsg">네트워크 또는 서버 오류로 요청이 실패했습니다.</div>
+          <div class="hint board-error-meta" id="boardErrorMeta" aria-hidden="true"></div>
+
           <div class="board-error-actions">
             <button class="btn" type="button" id="boardRetryBtn">다시 시도</button>
             <a class="btn js-close" href="/" id="boardGoHomeBtn">홈</a>
@@ -147,7 +156,7 @@
     };
   </script>
 
-  <!-- Board state manager (여기서 보드 상태 전담) -->
+  <!-- Board state manager -->
   <script src="{% static 'blog/js/board_state.js' %}"></script>
 
   <!-- Search UX -->

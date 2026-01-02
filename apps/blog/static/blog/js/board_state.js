@@ -1,15 +1,3 @@
-/*
-Board state manager
-- Loading overlay + Error overlay
-- Single source of truth for:
-  - open/close based on markers in #boardContent
-  - reading mode
-  - close (js-close): close UI + pushState('/') + (optional) load home via HTMX
-  - back (js-back): history.back() preferred ONLY when detail was entered via HTMX; otherwise load href
-  - mobile dim + swipe close
-  - URL sync on popstate (visual only)
-*/
-
 (function () {
   'use strict';
 
@@ -20,6 +8,9 @@ Board state manager
   const errorEl = document.getElementById('boardError');
   const retryBtn = document.getElementById('boardRetryBtn');
 
+  const errorMsgEl = document.getElementById('boardErrorMsg');
+  const errorMetaEl = document.getElementById('boardErrorMeta');
+
   const dimEl = document.getElementById('boardDim');
   const edgeEl = document.getElementById('boardSwipeEdge');
 
@@ -28,13 +19,14 @@ Board state manager
   if (!wrap || !board || !boardContent) return;
 
   let lastUrl = '';
+  let autoRetryArmed = false;
 
-  // --------------------------------
-  // Step B support: direct-entry safe back
-  // --------------------------------
   const KEY_LAST_LIST_URL   = 'DG:lastListUrl';
   const KEY_LAST_DETAIL_URL = 'DG:lastDetailUrl';
-  const KEY_DETAIL_VIA_HTMX = 'DG:detailViaHtmx'; // ✅ 이번 페이지 생애에서 HTMX로 상세 진입했는지
+  const KEY_DETAIL_VIA_HTMX = 'DG:detailViaHtmx';
+
+  const KEY_LAST_BOARD_URL      = 'DG:lastBoardUrl';
+  const KEY_LAST_GOOD_BOARD_URL = 'DG:lastGoodBoardUrl';
 
   function safeGet(key) {
     try { return sessionStorage.getItem(key) || ''; } catch (_) { return ''; }
@@ -56,7 +48,6 @@ Board state manager
     }
   }
 
-  // 기대 라우트: /<country>/<category>/<post>/ (세그먼트 3개 이상이면 상세로 간주)
   function _isPostDetailUrl(u) {
     const norm = _normUrl(u);
     const path = (norm.split('?')[0] || '').toString();
@@ -73,23 +64,17 @@ Board state manager
     }
   }
 
-  // 상세로 "진입하는 요청"이면, 그 직전(현재) URL을 리스트로 저장 + 어떤 상세로 갔는지도 저장
   function rememberListIfGoingToDetail(requestUrl) {
     if (!_isPostDetailUrl(requestUrl)) return;
 
-    const cur = currentPathWithSearch(); // 상세로 가기 직전 URL (리스트/탭/검색/페이지)
+    const cur = currentPathWithSearch();
     const detail = _normUrl(requestUrl);
 
     safeSet(KEY_LAST_LIST_URL, cur);
     safeSet(KEY_LAST_DETAIL_URL, detail);
-
-    // ✅ "이번 페이지 생애에서 HTMX로 상세 진입" 표시
     safeSet(KEY_DETAIL_VIA_HTMX, '1');
   }
 
-  // --------------------------------
-  // overlays
-  // --------------------------------
   function setHidden(el, hidden) {
     if (!el) return;
     if (hidden) {
@@ -101,90 +86,17 @@ Board state manager
     }
   }
 
-  function showLoading(url) {
-    if (url) lastUrl = url;
-    setHidden(errorEl, true);
-    setHidden(loadingEl, false);
+  function setText(el, text) {
+    if (!el) return;
+    el.textContent = text || '';
   }
 
-  function hideLoading() {
-    setHidden(loadingEl, true);
+  function setDisabled(el, disabled) {
+    if (!el) return;
+    if (disabled) el.setAttribute('disabled', '');
+    else el.removeAttribute('disabled');
   }
 
-  function showError(url) {
-    if (url) lastUrl = url;
-    hideLoading();
-    setHidden(errorEl, false);
-  }
-
-  function hideError() {
-    setHidden(errorEl, true);
-  }
-
-  async function retry() {
-    const url = lastUrl || currentPathWithSearch();
-    if (!url) return;
-
-    if (window.htmx && typeof window.htmx.ajax === 'function') {
-      hideError();
-      showLoading(url);
-      try {
-        window.htmx.ajax('GET', url, { target: '#boardContent', swap: 'innerHTML' });
-      } catch (_) {
-        showError(url);
-      }
-      return;
-    }
-
-    hideError();
-    showLoading(url);
-
-    try {
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: { 'HX-Request': 'true', 'X-Requested-With': 'XMLHttpRequest' },
-        cache: 'no-store'
-      });
-
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-
-      const html = await res.text();
-      boardContent.innerHTML = html;
-
-      if (window.htmx && typeof window.htmx.process === 'function') {
-        window.htmx.process(boardContent);
-      }
-
-      hideLoading();
-
-      const evt = new CustomEvent('htmx:afterSwap', { bubbles: true });
-      boardContent.dispatchEvent(evt);
-
-    } catch (_) {
-      showError(url);
-    }
-  }
-
-  // Expose minimal API for globe.js (loading/error)
-  window.DongriGoBoardState = {
-    startLoading: showLoading,
-    stopLoading: hideLoading,
-    showError: showError,
-    hideError: hideError,
-    setLastUrl: (u) => { lastUrl = u || lastUrl; },
-    retry: retry,
-  };
-
-  if (retryBtn) {
-    retryBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      retry();
-    });
-  }
-
-  // -----------------------------
-  // UI state (single source)
-  // -----------------------------
   function isBoardOpen() {
     return wrap.classList.contains('has-board');
   }
@@ -238,6 +150,170 @@ Board state manager
     window.setTimeout(() => wrap.classList.remove('closing'), 260);
   }
 
+  function ensureBoardVisible() {
+    openVisualOnly();
+  }
+
+  function renderErrorMessage(url, info) {
+    const online = (typeof navigator !== 'undefined') ? navigator.onLine : true;
+    const status = info && typeof info.status === 'number' ? info.status : 0;
+
+    if (!online) {
+      setText(errorMsgEl, '인터넷 연결이 끊겼습니다. 연결 상태를 확인해 주세요.');
+      setText(errorMetaEl, '온라인 상태로 전환되면 자동으로 1회 재시도합니다.');
+      setDisabled(retryBtn, true);
+      return;
+    }
+
+    setDisabled(retryBtn, false);
+
+    if (status === 404) {
+      setText(errorMsgEl, '요청한 콘텐츠를 찾을 수 없습니다.');
+      setText(errorMetaEl, `HTTP ${status} · ${_normUrl(url)}`);
+      return;
+    }
+
+    if (status >= 500) {
+      setText(errorMsgEl, '서버 오류로 요청이 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      setText(errorMetaEl, `HTTP ${status} · ${_normUrl(url)}`);
+      return;
+    }
+
+    if (status === 0) {
+      setText(errorMsgEl, '네트워크 또는 서버 오류로 요청이 실패했습니다.');
+      setText(errorMetaEl, _normUrl(url));
+      return;
+    }
+
+    setText(errorMsgEl, '요청이 실패했습니다. 다시 시도해 주세요.');
+    setText(errorMetaEl, `HTTP ${status} · ${_normUrl(url)}`);
+  }
+
+  function showLoading(url) {
+    if (url) {
+      lastUrl = url;
+      safeSet(KEY_LAST_BOARD_URL, _normUrl(url));
+    }
+    ensureBoardVisible();
+    setHidden(errorEl, true);
+    setHidden(loadingEl, false);
+  }
+
+  function hideLoading() {
+    setHidden(loadingEl, true);
+  }
+
+  function showError(url, info) {
+    const u = url || lastUrl || safeGet(KEY_LAST_BOARD_URL) || currentPathWithSearch();
+    lastUrl = u;
+    safeSet(KEY_LAST_BOARD_URL, _normUrl(u));
+
+    ensureBoardVisible();
+
+    hideLoading();
+    renderErrorMessage(u, info || {});
+    setHidden(errorEl, false);
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      autoRetryArmed = true;
+    }
+  }
+
+  function hideError() {
+    setHidden(errorEl, true);
+    setDisabled(retryBtn, false);
+    setText(errorMetaEl, '');
+  }
+
+  async function retry() {
+    const url =
+      lastUrl ||
+      safeGet(KEY_LAST_BOARD_URL) ||
+      currentPathWithSearch();
+
+    if (!url) return;
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      showError(url, { status: 0 });
+      return;
+    }
+
+    if (window.htmx && typeof window.htmx.ajax === 'function') {
+      hideError();
+      showLoading(url);
+      try {
+        window.htmx.ajax('GET', url, { target: '#boardContent', swap: 'innerHTML' });
+      } catch (_) {
+        showError(url, { status: 0 });
+      }
+      return;
+    }
+
+    hideError();
+    showLoading(url);
+
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'HX-Request': 'true', 'X-Requested-With': 'XMLHttpRequest' },
+        cache: 'no-store'
+      });
+
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+
+      const html = await res.text();
+      boardContent.innerHTML = html;
+
+      if (window.htmx && typeof window.htmx.process === 'function') {
+        window.htmx.process(boardContent);
+      }
+
+      hideLoading();
+
+      const evt = new CustomEvent('htmx:afterSwap', { bubbles: true });
+      boardContent.dispatchEvent(evt);
+
+    } catch (e) {
+      const msg = (e && e.message) ? e.message : '';
+      const m = msg.match(/HTTP\s+(\d+)/i);
+      const status = m ? parseInt(m[1], 10) : 0;
+      showError(url, { status: Number.isFinite(status) ? status : 0 });
+    }
+  }
+
+  window.DongriGoBoardState = {
+    startLoading: showLoading,
+    stopLoading: hideLoading,
+    showError: showError,
+    hideError: hideError,
+    setLastUrl: (u) => { lastUrl = u || lastUrl; safeSet(KEY_LAST_BOARD_URL, _normUrl(lastUrl)); },
+    retry: retry,
+  };
+
+  if (retryBtn) {
+    retryBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      retry();
+    });
+  }
+
+  window.addEventListener('online', () => {
+    setDisabled(retryBtn, false);
+
+    const isErrorVisible = errorEl && !errorEl.hasAttribute('hidden');
+    if (!isErrorVisible) return;
+    if (!autoRetryArmed) return;
+
+    autoRetryArmed = false;
+    retry();
+  });
+
+  window.addEventListener('offline', () => {
+    const isErrorVisible = errorEl && !errorEl.hasAttribute('hidden');
+    if (!isErrorVisible) return;
+    showError(lastUrl || safeGet(KEY_LAST_BOARD_URL) || currentPathWithSearch(), { status: 0 });
+  });
+
   function syncReadingModeFromContent() {
     const marker = boardContent.querySelector("[data-has-post='1']");
     if (marker) board.classList.add('reading');
@@ -255,9 +331,6 @@ Board state manager
     syncOpenCloseFromContent();
   }
 
-  // -----------------------------
-  // HTMX hooks (boardContent only)
-  // -----------------------------
   function isBoardRequest(detail) {
     if (!detail) return false;
 
@@ -288,9 +361,14 @@ Board state manager
     if (!isBoardRequest(e.detail)) return;
 
     const url = extractUrl(e.detail);
-
-    // ✅ 리스트→상세 진입 tracking
     rememberListIfGoingToDetail(url);
+
+    // ✅ 핵심: 오프라인이면 HTMX 요청 자체를 취소해야 Network에 실패 XHR이 안 뜸
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      try { e.preventDefault(); } catch (_) {}
+      showError(url, { status: 0 });
+      return;
+    }
 
     showLoading(url);
   });
@@ -301,10 +379,12 @@ Board state manager
       hideError();
       syncUiFromContent();
 
-      // ✅ afterSwap 결과가 "상세"면 detailViaHtmx=1 유지,
-      // 상세가 아니면(목록/홈) 0으로 내려서 direct-entry 구분을 강화
       const isDetail = !!boardContent.querySelector("[data-has-post='1']");
       safeSet(KEY_DETAIL_VIA_HTMX, isDetail ? '1' : '0');
+
+      safeSet(KEY_LAST_GOOD_BOARD_URL, currentPathWithSearch());
+      safeSet(KEY_LAST_BOARD_URL, currentPathWithSearch());
+      lastUrl = currentPathWithSearch();
     }
   });
 
@@ -314,17 +394,18 @@ Board state manager
 
   function onHtmxError(e) {
     if (!isBoardRequest(e.detail)) return;
+
     const url = extractUrl(e.detail);
-    showError(url);
+    const xhr = e.detail && e.detail.xhr ? e.detail.xhr : null;
+    const status = xhr && typeof xhr.status === 'number' ? xhr.status : 0;
+
+    showError(url, { status });
   }
 
   document.body.addEventListener('htmx:responseError', onHtmxError);
   document.body.addEventListener('htmx:sendError', onHtmxError);
   document.body.addEventListener('htmx:timeout', onHtmxError);
 
-  // -----------------------------
-  // Close / Back actions
-  // -----------------------------
   function pushHomeUrl() {
     try {
       if ((window.location.pathname || '/') !== '/') {
@@ -344,7 +425,6 @@ Board state manager
     window.htmx.ajax('GET', '/', { target: '#boardContent', swap: 'innerHTML' });
   }
 
-  // ✅ Step A: 닫기 동작 “완전 고정”
   function closeBoard({ loadHome = true } = {}) {
     abortBoardRequests();
     closeVisualOnly();
@@ -352,19 +432,16 @@ Board state manager
     if (loadHome) loadHomeIntoBoardContent();
   }
 
-  // ✅ Step B: direct-entry면 무조건 href로, HTMX로 들어온 상세에서만 history.back()
   function backSmart(href) {
     const expected = _normUrl(href);
     if (!expected) return;
 
     const viaHtmx = safeGet(KEY_DETAIL_VIA_HTMX) === '1';
     if (!viaHtmx) {
-      // ✅ 직접 URL 진입(풀 페이지 로드) 포함 → history.back() 금지
       loadHrefIntoBoard(expected);
       return;
     }
 
-    // HTMX로 상세 들어온 케이스만 history.back() 시도 + 불일치면 복구
     let checked = false;
 
     const checkAndFix = () => {
@@ -384,7 +461,6 @@ Board state manager
     setTimeout(checkAndFix, 500);
   }
 
-  // ✅ 클릭 가로채기: capture 단계에서 htmx보다 먼저 먹고(stopImmediatePropagation)
   document.addEventListener('click', (e) => {
     const a = e.target && e.target.closest ? e.target.closest('a') : null;
     if (!a) return;
@@ -404,9 +480,8 @@ Board state manager
       backSmart(a.getAttribute('href') || '');
       return;
     }
-  }, true); // ✅ capture=true
+  }, true);
 
-  // dim click to close (mobile only)
   if (dimEl) {
     dimEl.addEventListener('click', (e) => {
       if (!mm.matches) return;
@@ -416,9 +491,6 @@ Board state manager
     });
   }
 
-  // -----------------------------
-  // Swipe close (edge only, mobile)
-  // -----------------------------
   function snapTo(x, ms) {
     board.style.transition = `transform ${ms}ms ease`;
     board.style.transform = `translateX(${x}px)`;
@@ -440,7 +512,7 @@ Board state manager
 
   let prevX = 0;
   let prevT = 0;
-  let lastV = 0; // px/ms
+  let lastV = 0;
 
   function resetDrag() {
     dragging = false;
@@ -506,8 +578,8 @@ Board state manager
 
       if (dimEl) {
         dimEl.classList.add('on');
-        const t = Math.max(0, Math.min(1, clamped / w));
-        const opacity = 0.35 * (1 - t);
+        const t2 = Math.max(0, Math.min(1, clamped / w));
+        const opacity = 0.35 * (1 - t2);
         dimEl.style.opacity = String(opacity);
       }
     }, { passive: false });
@@ -544,9 +616,6 @@ Board state manager
     });
   }
 
-  // -----------------------------
-  // popstate: visual sync only
-  // -----------------------------
   function isHomePath() {
     const p = window.location.pathname || '/';
     return p === '/';
@@ -557,9 +626,12 @@ Board state manager
   });
 
   document.addEventListener('DOMContentLoaded', () => {
-    // ✅ 핵심: "풀 페이지 로드"가 발생하면 detailViaHtmx는 무조건 0에서 시작해야 함
     safeSet(KEY_DETAIL_VIA_HTMX, '0');
     syncUiFromContent();
+
+    const cur = currentPathWithSearch();
+    safeSet(KEY_LAST_BOARD_URL, cur);
+    lastUrl = cur;
   });
 
 })();

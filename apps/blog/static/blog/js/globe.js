@@ -71,7 +71,8 @@ Globe integration (globe.gl) - TopoJSON only
   }
 
   function polyName(poly) {
-    const p = poly?.properties || {};
+    // (보수적) optional chaining 제거
+    const p = (poly && poly.properties) ? poly.properties : {};
     return (p.name || p.NAME || p.admin || p.ADMIN || '').toString();
   }
 
@@ -83,20 +84,33 @@ Globe integration (globe.gl) - TopoJSON only
   }
 
   // ✅ 보드 갱신(fetch + HX-Request)
-  // 주의: popstate에서 이 함수를 호출하면 “목록 눌렀는데 /<slug>/가 덮어쓰기” 같은 문제가 재발함.
   let inflight = null;
+
   async function loadBoard(url, opts) {
     const options = opts || {};
     const pushUrl = (options.pushUrl !== false);
 
     const boardContent = document.getElementById('boardContent');
     if (!boardContent) {
+      // board shell 자체가 없으면 기존 방식대로 문서 이동(최후의 fallback)
       window.location.href = url;
       return;
     }
 
     const bs = window.DongriGoBoardState;
     if (bs && typeof bs.setLastUrl === 'function') bs.setLastUrl(url);
+
+    // ✅ 오프라인이면 fetch 전에 즉시 에러 오버레이 (불필요한 실패 요청 감소)
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      if (pushUrl) {
+        try { window.history.pushState({}, '', url); } catch (_) {}
+      }
+      if (bs && typeof bs.showError === 'function') {
+        bs.showError(url, { status: 0 });
+      }
+      return;
+    }
+
     if (bs && typeof bs.startLoading === 'function') bs.startLoading(url);
 
     try {
@@ -110,9 +124,16 @@ Globe integration (globe.gl) - TopoJSON only
         cache: 'no-store',
       });
 
+      // 204는 “콘텐츠 없음”류로 취급(보수적으로 에러 오버레이)
+      if (res.status === 204) {
+        if (bs && typeof bs.stopLoading === 'function') bs.stopLoading();
+        if (bs && typeof bs.showError === 'function') bs.showError(url, { status: 0 });
+        return;
+      }
+
       if (!res.ok) {
         if (bs && typeof bs.stopLoading === 'function') bs.stopLoading();
-        window.location.href = url;
+        if (bs && typeof bs.showError === 'function') bs.showError(url, { status: res.status });
         return;
       }
 
@@ -124,23 +145,26 @@ Globe integration (globe.gl) - TopoJSON only
       }
 
       if (pushUrl) {
-        window.history.pushState({}, '', url);
+        try { window.history.pushState({}, '', url); } catch (_) {}
       }
 
       if (bs && typeof bs.stopLoading === 'function') bs.stopLoading();
       if (bs && typeof bs.hideError === 'function') bs.hideError();
 
+      // board_state.js의 afterSwap 동기화 트리거
       const evt = new CustomEvent('htmx:afterSwap', { bubbles: true });
       boardContent.dispatchEvent(evt);
 
     } catch (e) {
       if (e && e.name === 'AbortError') return;
 
+      if (bs && typeof bs.stopLoading === 'function') bs.stopLoading();
       if (bs && typeof bs.showError === 'function') {
-        bs.showError(url);
+        bs.showError(url, { status: 0 });
         return;
       }
 
+      // 최후 fallback
       window.location.href = url;
     }
   }
@@ -176,9 +200,6 @@ Globe integration (globe.gl) - TopoJSON only
     }
   }
 
-  // -------------------------
-  // ✅ 우선순위 매핑(충돌 시 덮어쓰기)
-  // -------------------------
   function isNumericishSlug(slug) {
     return /^-?\d+$/.test((slug || '').toString().trim());
   }
@@ -239,7 +260,6 @@ Globe integration (globe.gl) - TopoJSON only
     const scriptTag = document.getElementById('globeCountriesData');
     const countries = scriptTag ? JSON.parse(scriptTag.textContent || '[]') : [];
 
-    // prio: name_en(5) / name(4) / 괄호영문(4) / aliases(2) / iso(1)
     countries.forEach((c) => {
       if (!c || !c.slug) return;
 
@@ -261,7 +281,7 @@ Globe integration (globe.gl) - TopoJSON only
     });
 
     let selectedSlug =
-      document.getElementById('globeArea')?.dataset.selectedCountrySlug ||
+      (document.getElementById('globeArea') && document.getElementById('globeArea').dataset.selectedCountrySlug) ||
       getSelectedSlugFromPathname();
 
     const globe = window.Globe()(mount)
@@ -356,7 +376,6 @@ Globe integration (globe.gl) - TopoJSON only
         openBoardForSlug(slug, { pushUrl: true });
       });
 
-    // ✅ TopoJSON only
     try {
       const world = await fetchJson(WORLD_TOPOJSON_URL);
       const polys = window.topojson.feature(world, world.objects.countries).features;
@@ -371,7 +390,7 @@ Globe integration (globe.gl) - TopoJSON only
 
     setActiveCountryLink(selectedSlug);
 
-    // ✅ popstate: 콘텐츠를 건드리지 말고, active/하이라이트만 동기화
+    // ✅ 원칙 유지: popstate에서는 보드 콘텐츠 로드 금지 (표시만 동기화)
     window.addEventListener('popstate', () => {
       const slug = getSelectedSlugFromPathname();
       selectedSlug = slug || '';
@@ -381,7 +400,6 @@ Globe integration (globe.gl) - TopoJSON only
       globe.polygonAltitude(globe.polygonAltitude());
     });
 
-    // ✅ boardContent swap 후에도 active/하이라이트만 동기화
     document.body.addEventListener('htmx:afterSwap', (e) => {
       if (e.target && e.target.id === 'boardContent') {
         const slug = getSelectedSlugFromPathname();
@@ -393,7 +411,6 @@ Globe integration (globe.gl) - TopoJSON only
       }
     });
 
-    // 최소 API
     window.DongriGoGlobe = window.DongriGoGlobe || {};
     window.DongriGoGlobe.loadBoard = loadBoard;
     window.DongriGoGlobe.openBoardForSlug = openBoardForSlug;
