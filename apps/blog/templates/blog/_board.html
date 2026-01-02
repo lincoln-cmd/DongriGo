@@ -41,8 +41,8 @@
     <div class="tabs">
       {% for key,label,cat_slug in tabs %}
         <a class="{% if selected_category == key %}active{% endif %}"
-           href="/{{ selected_country.slug }}/{{ cat_slug }}/?page=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
-           hx-get="/{{ selected_country.slug }}/{{ cat_slug }}/?page=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+           href="/{{ selected_country.slug }}/{{ cat_slug }}/?page=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+           hx-get="/{{ selected_country.slug }}/{{ cat_slug }}/?page=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
            hx-target="#boardContent"
            hx-swap="innerHTML"
            hx-indicator=".htmx-indicator"
@@ -51,6 +51,23 @@
         </a>
       {% endfor %}
     </div>
+
+    {% if tag %}
+      <div class="board-active-filters" aria-label="Active filters">
+        {% if selected_tag %}
+          <span class="tag-chip tag-chip--active">#{{ selected_tag.name }}</span>
+        {% else %}
+          <span class="tag-chip tag-chip--active">#{{ tag }}</span>
+        {% endif %}
+        <a class="hint"
+           href="{{ category_path }}?page=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+           hx-get="{{ category_path }}?page=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+           hx-target="#boardContent"
+           hx-swap="innerHTML"
+           hx-indicator=".htmx-indicator"
+           hx-push-url="true">태그 해제</a>
+      </div>
+    {% endif %}
 
     <div class="board-controls">
       <div class="board-search-wrap">
@@ -65,6 +82,9 @@
           <input class="search-input" type="text" name="q" value="{{ q|default:'' }}"
                  placeholder="글 제목/본문 검색" />
           <input type="hidden" name="page" value="1" />
+          {% if tag %}
+            <input type="hidden" name="tag" value="{{ tag }}" />
+          {% endif %}
           {% if sort and sort != 'new' %}
             <input type="hidden" name="sort" value="{{ sort }}" />
           {% endif %}
@@ -91,6 +111,9 @@
         {% if q %}
           <input type="hidden" name="q" value="{{ q }}" />
         {% endif %}
+        {% if tag %}
+          <input type="hidden" name="tag" value="{{ tag }}" />
+        {% endif %}
         <label class="hint" for="boardSortSelect" style="white-space:nowrap;">정렬</label>
         <select id="boardSortSelect" name="sort" onchange="this.form.requestSubmit();">
           {% for v, label in sort_options %}
@@ -103,8 +126,8 @@
     {% if q %}
       <div style="margin-top:8px;">
         <a class="hint"
-           href="{{ category_path }}?page=1{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
-           hx-get="{{ category_path }}?page=1{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+           href="{{ category_path }}?page=1{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+           hx-get="{{ category_path }}?page=1{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
            hx-target="#boardContent"
            hx-swap="innerHTML"
            hx-indicator=".htmx-indicator"
@@ -116,8 +139,8 @@
   <div class="toc">
     {% for p in posts %}
       <a class="toc-link {% if selected_post and selected_post.slug == p.slug %}active{% endif %}"
-         href="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
-         hx-get="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+         href="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+         hx-get="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
          hx-target="#boardContent"
          hx-swap="innerHTML"
          hx-indicator=".htmx-indicator"
@@ -131,12 +154,26 @@
           <div class="hint">다른 키워드로 검색하거나, 검색을 해제해 보세요.</div>
           <div class="board-emptyactions">
             <a class="btn"
-               href="{{ category_path }}?page=1{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
-               hx-get="{{ category_path }}?page=1{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+               href="{{ category_path }}?page=1{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+               hx-get="{{ category_path }}?page=1{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
                hx-target="#boardContent"
                hx-swap="innerHTML"
                hx-indicator=".htmx-indicator"
                hx-push-url="true">검색 해제</a>
+          </div>
+        </div>
+      {% elif tag and tag_not_found %}
+        <div class="board-emptybox">
+          <div class="board-emptytitle">태그를 찾을 수 없습니다</div>
+          <div class="hint">존재하지 않는 태그(slug)입니다.</div>
+          <div class="board-emptyactions">
+            <a class="btn"
+               href="{{ category_path }}?page=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+               hx-get="{{ category_path }}?page=1{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+               hx-target="#boardContent"
+               hx-swap="innerHTML"
+               hx-indicator=".htmx-indicator"
+               hx-push-url="true">태그 해제</a>
           </div>
         </div>
       {% else %}
@@ -162,8 +199,8 @@
   {% if selected_post %}
     <div class="pager">
       <a class="btn pager-back js-back"
-         href="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
-         hx-get="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+         href="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+         hx-get="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
          hx-target="#boardContent"
          hx-swap="innerHTML"
          hx-indicator=".htmx-indicator"
@@ -172,8 +209,8 @@
       {% if page_obj and page_obj.paginator.num_pages > 1 %}
         <div class="pager-nav">
           {% if page_obj.has_previous %}
-            <a href="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
-               hx-get="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+            <a href="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+               hx-get="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
                hx-target="#boardContent" hx-swap="innerHTML"
                hx-indicator=".htmx-indicator" hx-push-url="true">이전</a>
           {% else %}
@@ -183,8 +220,8 @@
           <span class="hint">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
 
           {% if page_obj.has_next %}
-            <a href="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
-               hx-get="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+            <a href="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+               hx-get="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
                hx-target="#boardContent" hx-swap="innerHTML"
                hx-indicator=".htmx-indicator" hx-push-url="true">다음</a>
           {% else %}
@@ -198,8 +235,8 @@
     <div class="pager">
       <div class="pager-nav">
         {% if page_obj.has_previous %}
-          <a href="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
-             hx-get="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+          <a href="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+             hx-get="{{ category_path }}?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
              hx-target="#boardContent" hx-swap="innerHTML"
              hx-indicator=".htmx-indicator" hx-push-url="true">이전</a>
         {% else %}
@@ -209,8 +246,8 @@
         <span class="hint">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
 
         {% if page_obj.has_next %}
-          <a href="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
-             hx-get="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+          <a href="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+             hx-get="{{ category_path }}?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
              hx-target="#boardContent" hx-swap="innerHTML"
              hx-indicator=".htmx-indicator" hx-push-url="true">다음</a>
         {% else %}
@@ -223,6 +260,20 @@
   {% if selected_post %}
     <div class="content" id="postContent">
       <h3 style="margin:0 0 8px 0;">{{ selected_post.title }}</h3>
+
+      {% if selected_post.tags.all %}
+        <div class="post-tags" aria-label="Post tags">
+          {% for t in selected_post.tags.all %}
+            <a class="tag-chip"
+               href="{{ category_path }}?page=1{% if q %}&q={{ q|urlencode }}{% endif %}&tag={{ t.slug|urlencode }}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+               hx-get="{{ category_path }}?page=1{% if q %}&q={{ q|urlencode }}{% endif %}&tag={{ t.slug|urlencode }}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+               hx-target="#boardContent"
+               hx-swap="innerHTML"
+               hx-indicator=".htmx-indicator"
+               hx-push-url="true">#{{ t.name }}</a>
+          {% endfor %}
+        </div>
+      {% endif %}
 
       {% if selected_post.cover_image %}
         <img

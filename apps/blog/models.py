@@ -1,6 +1,6 @@
 from django.db import models
 from django.utils import timezone
-from django.utils.text import slugify
+from django.utils.text import slugify  # ✅ 필수: defaultfilters.slugify 금지
 
 import markdown as md
 import bleach
@@ -39,7 +39,7 @@ class Country(models.Model):
         (필드 추가/마이그레이션 없이 admin/seed 실수 방지용)
         """
         base = (base or "").strip()
-        s = slugify(base)  # 기본은 ascii slug
+        s = slugify(base)
         if not s:
             s = slugify(base, allow_unicode=True)
         s = (s or "country")[:max_len]
@@ -75,6 +75,48 @@ class Country(models.Model):
         super().save(*args, **kwargs)
 
 
+class Tag(models.Model):
+    """
+    Phase 3 (minimal): Tag system
+    - created_at 없음(현재 DB 에러 원인 제거)
+    """
+    name = models.CharField(max_length=50, unique=True)
+    slug = models.SlugField(max_length=60, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    @staticmethod
+    def _unique_slugify(base: str, *, instance_pk=None, max_len: int = 60) -> str:
+        base = (base or "").strip()
+        s = slugify(base)
+        if not s:
+            s = slugify(base, allow_unicode=True)
+        s = (s or "tag")[:max_len]
+
+        candidate = s
+        n = 2
+        while True:
+            qs = Tag.objects.filter(slug=candidate)
+            if instance_pk is not None:
+                qs = qs.exclude(pk=instance_pk)
+            if not qs.exists():
+                return candidate
+
+            suffix = f"-{n}"
+            cut = max_len - len(suffix)
+            candidate = (s[:cut] if cut > 0 else s) + suffix
+            n += 1
+
+    def save(self, *args, **kwargs):
+        if not (self.slug or "").strip():
+            self.slug = self._unique_slugify(self.name, instance_pk=self.pk, max_len=60)
+        super().save(*args, **kwargs)
+
+
 class Post(models.Model):
     class Category(models.TextChoices):
         HISTORY = "HISTORY", "History"
@@ -87,6 +129,10 @@ class Post(models.Model):
 
     title = models.CharField(max_length=200)
     slug = models.SlugField(max_length=220, unique=True)
+
+    # ✅ Phase 3: tags
+    tags = models.ManyToManyField(Tag, blank=True, related_name="posts")
+
     content = models.TextField(
         blank=True,
         help_text="이미지 삽입: [[img:123]] (Post Images의 ID 사용). 코드블럭(```) 안에서는 치환되지 않습니다."
@@ -128,10 +174,9 @@ class Post(models.Model):
     def _unique_slugify(model_cls, base: str, *, instance_pk=None, max_len: int = 220) -> str:
         """
         base 로 slug 후보를 만들고, 충돌 시 -2, -3... 붙여서 유니크하게 만든다.
-        (필드 추가/마이그레이션 없이 admin 실수 방지용)
         """
         base = (base or "").strip()
-        s = slugify(base)  # 보통 영어/숫자면 이게 제일 깔끔
+        s = slugify(base)
         if not s:
             s = slugify(base, allow_unicode=True)
         s = (s or "post")[:max_len]
@@ -152,9 +197,7 @@ class Post(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        ✅ Step 3 적용:
-        - slug/country/category 중 하나라도 바뀌면 (이전 URL이 깨지므로)
-          PostSlugHistory에 (이전 country, 이전 category, 이전 slug) 조합을 저장한다.
+        - slug/country/category 변경 시 PostSlugHistory에 이전 조합 저장
         """
         old_slug = None
         old_country_id = None
@@ -167,17 +210,14 @@ class Post(models.Model):
                 old_country_id = old.get("country_id")
                 old_category = old.get("category")
 
-        # ✅ slug 비어있으면 자동 생성(중복이면 -2, -3…)
         if not self.slug:
             self.slug = self._unique_slugify(Post, self.title, instance_pk=self.pk)
 
-        # ✅ 발행글인데 published_at이 비어있으면 오늘로 자동 세팅
         if self.is_published and not self.published_at:
             self.published_at = timezone.localdate()
 
         super().save(*args, **kwargs)
 
-        # ✅ 이전 URL 보존(슬러그/국가/카테고리 변경 시)
         if self.pk and old_slug and old_country_id and old_category:
             old_key = (old_country_id, old_category, old_slug)
             new_key = (self.country_id, self.category, self.slug)
@@ -190,18 +230,12 @@ class Post(models.Model):
                         defaults={"post": self},
                     )
                 except IntegrityError:
-                    # 드물게: 동일 old URL이 이미 다른 히스토리로 점유된 경우(보수적으로 무시)
                     pass
 
     def _replace_img_tokens_outside_codeblocks(self, text: str) -> str:
-        """
-        - ``` fenced code block 내부는 치환하지 않음
-        - 토큰이 현재 Post의 PostImage(id)와 매칭되지 않으면 그대로 둠(보수적)
-        """
         if not text:
             return ""
 
-        # 현재 포스트에 연결된 이미지만 허용(보안/운영상 안전)
         images_by_id = {str(img.id): img for img in self.images.all()}
 
         def repl(match: re.Match) -> str:
@@ -213,7 +247,6 @@ class Post(models.Model):
             src = getattr(img.image, "url", "") or ""
             caption_raw = (img.caption or "").strip()
 
-            # ✅ attribute 안전성: 따옴표/특수문자 대비해서 escape
             src_esc = html.escape(src, quote=True)
             cap_esc = html.escape(caption_raw, quote=True)
 
@@ -230,16 +263,12 @@ class Post(models.Model):
         out = []
         for part in parts:
             if part.startswith("```") and part.endswith("```"):
-                out.append(part)  # 코드블럭은 그대로
+                out.append(part)
             else:
                 out.append(self._IMG_TOKEN_RE.sub(repl, part))
         return "".join(out)
 
     def used_image_ids(self) -> set[int]:
-        """
-        본문에 [[img:123]] 형태로 '사용된' 이미지 id를 추출.
-        ``` fenced code block 내부는 제외(치환 규칙과 동일)
-        """
         text = self.content or ""
         if not text:
             return set()
@@ -257,17 +286,14 @@ class Post(models.Model):
         return ids
 
     def rendered_content(self) -> str:
-        # 1) 토큰 치환(코드블럭 제외)
         src_md = self._replace_img_tokens_outside_codeblocks(self.content or "")
 
-        # 2) markdown -> html
         raw_html = md.markdown(
             src_md,
             extensions=["fenced_code", "tables", "nl2br"],
             output_format="html5",
         )
 
-        # 3) sanitize(허용 태그/속성 확장: figure/figcaption + img class/data-*)
         allowed_tags = bleach.sanitizer.ALLOWED_TAGS.union({
             "p", "br", "hr",
             "h1", "h2", "h3", "h4",
@@ -297,7 +323,6 @@ class Post(models.Model):
             strip=True,
         )
 
-        # 링크는 새탭 + nofollow/noopener 강제
         cleaned = cleaned.replace("<a ", '<a rel="nofollow noopener" target="_blank" ')
         return cleaned
 
@@ -321,18 +346,13 @@ class PostImage(models.Model):
         return f"{self.post_id} - {self.order}" + (f" ({cap})" if cap else "")
 
     def save(self, *args, **kwargs):
-        """
-        신규 이미지 생성 시 order가 0이면 자동으로 '맨 뒤'에 배치.
-        - 이미 order를 수동 지정한 경우엔 그대로 존중
-        - 기존 레코드 수정 시엔 건드리지 않음
-        """
         if self.pk is None and (self.order is None or self.order == 0):
             max_order = (
                 PostImage.objects.filter(post=self.post)
                 .aggregate(m=Max("order"))
                 .get("m")
             )
-            self.order = (max_order or 0) + 10  # 10 단위로 띄워두면 중간 삽입이 편함
+            self.order = (max_order or 0) + 10
         super().save(*args, **kwargs)
 
 
@@ -356,7 +376,7 @@ class SeedMeta(models.Model):
 class PostSlugHistory(models.Model):
     post = models.ForeignKey("Post", on_delete=models.CASCADE, related_name="slug_history")
     country = models.ForeignKey("Country", on_delete=models.CASCADE, related_name="post_slug_history")
-    category = models.CharField(max_length=20)  # Post.category와 동일 값 저장
+    category = models.CharField(max_length=20)
     old_slug = models.SlugField(max_length=220, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

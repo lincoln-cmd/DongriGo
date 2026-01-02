@@ -12,7 +12,7 @@ from django.core.exceptions import FieldError
 from django.views.decorators.http import require_POST
 from django.contrib.admin.views.decorators import staff_member_required
 
-from .models import Country, Post, PostImage, PostSlugHistory
+from .models import Country, Tag, Post, PostImage, PostSlugHistory
 
 
 def get_tabs():
@@ -167,6 +167,16 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
     q = (request.GET.get("q") or "").strip()
     is_searching = bool(q)
 
+    # Phase 3 (최소): tag 필터
+    tag_slug = (request.GET.get("tag") or "").strip()
+    selected_tag = None
+    tag_not_found = False
+    if tag_slug:
+        try:
+            selected_tag = Tag.objects.get(slug=tag_slug)
+        except Tag.DoesNotExist:
+            tag_not_found = True
+
     # -----------------------------
     # Phase 2-2: 빈 상태 UX용 "카운트" 계산
     # -----------------------------
@@ -188,12 +198,22 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
     if is_searching:
         posts_qs = posts_qs.filter(Q(title__icontains=q) | Q(content__icontains=q))
 
+    if tag_slug:
+        if selected_tag:
+            posts_qs = posts_qs.filter(tags=selected_tag)
+        else:
+            # 보수적: 존재하지 않는 tag면 빈 결과로 처리
+            posts_qs = posts_qs.none()
+
     if sort_key == "old":
         posts_qs = posts_qs.order_by("published_at", "created_at", "id")
     elif sort_key == "title":
         posts_qs = posts_qs.order_by("title", "id")
     else:
         posts_qs = posts_qs.order_by("-published_at", "-created_at", "-id")
+
+    # 태그/상세에서 N+1 방지
+    posts_qs = posts_qs.prefetch_related("tags")
 
     paginator = Paginator(posts_qs, 10)
     page_obj = paginator.get_page(request.GET.get("page") or "1")
@@ -212,6 +232,7 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
                 .prefetch_related(
                     Prefetch("images", queryset=PostImage.objects.order_by("order", "id"))
                 )
+                .prefetch_related("tags")
                 .get(
                     country=selected_country,
                     category=selected_category,
@@ -276,6 +297,11 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
         "gallery_images": gallery_images,
         "q": q,
         "is_searching": is_searching,
+
+        # Phase 3 (최소): tag filter
+        "tag": tag_slug,
+        "selected_tag": selected_tag,
+        "tag_not_found": tag_not_found,
 
         # Phase 2: sort option
         "sort": sort_key,
