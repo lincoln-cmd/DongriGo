@@ -2,6 +2,8 @@
 
 <div data-has-country="0" hidden></div>
 <div data-has-post="0" hidden></div>
+<div data-board-open="1" hidden></div>
+<div data-has-tags="1" hidden></div>
 
 <div class="board-sticky">
   <div class="board-header">
@@ -65,8 +67,8 @@
   <div class="tags-posts">
     {% for p in posts %}
       <a class="tag-post-link"
-         href="{{ p.get_absolute_url }}"
-         hx-get="{{ p.get_absolute_url }}"
+         href="{{ p.get_absolute_url }}?src=tags&from_tag={{ selected_tag.slug|urlencode }}&from_page={{ page_obj.number }}{% if q %}&from_q={{ q|urlencode }}{% endif %}"
+         hx-get="{{ p.get_absolute_url }}?src=tags&from_tag={{ selected_tag.slug|urlencode }}&from_page={{ page_obj.number }}{% if q %}&from_q={{ q|urlencode }}{% endif %}"
          hx-target="#boardContent"
          hx-swap="innerHTML"
          hx-indicator=".htmx-indicator"

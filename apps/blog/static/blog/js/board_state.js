@@ -296,6 +296,10 @@ Board state manager
     const hasCountry = !!boardContent.querySelector("[data-has-country='1']");
     if (hasCountry) return true;
 
+    // ✅ Legacy/compat marker: tags board can announce itself
+    const hasTags = !!boardContent.querySelector("[data-has-tags='1']");
+    if (hasTags) return true;
+
     // ✅ New marker: non-country boards (tags etc.)
     const boardOpen = !!boardContent.querySelector("[data-board-open='1']");
     if (boardOpen) return true;

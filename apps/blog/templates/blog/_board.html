@@ -139,8 +139,8 @@
   <div class="toc">
     {% for p in posts %}
       <a class="toc-link {% if selected_post and selected_post.slug == p.slug %}active{% endif %}"
-         href="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
-         hx-get="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+         href="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}{% if from_tags %}&src=tags&from_tag={{ from_tag|urlencode }}&from_page={{ from_page }}{% if from_q %}&from_q={{ from_q|urlencode }}{% endif %}{% endif %}"
+         hx-get="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}{% if from_tags %}&src=tags&from_tag={{ from_tag|urlencode }}&from_page={{ from_page }}{% if from_q %}&from_q={{ from_q|urlencode }}{% endif %}{% endif %}"
          hx-target="#boardContent"
          hx-swap="innerHTML"
          hx-indicator=".htmx-indicator"
@@ -198,13 +198,23 @@
 
   {% if selected_post %}
     <div class="pager">
-      <a class="btn pager-back js-back"
-         href="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
-         hx-get="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
-         hx-target="#boardContent"
-         hx-swap="innerHTML"
-         hx-indicator=".htmx-indicator"
-         hx-push-url="true">목록</a>
+      {% if from_tags and tags_back_url %}
+        <a class="btn pager-back js-back"
+           href="{{ tags_back_url }}"
+           hx-get="{{ tags_back_url }}"
+           hx-target="#boardContent"
+           hx-swap="innerHTML"
+           hx-indicator=".htmx-indicator"
+           hx-push-url="true">목록</a>
+      {% else %}
+        <a class="btn pager-back js-back"
+           href="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+           hx-get="{{ category_path }}?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+           hx-target="#boardContent"
+           hx-swap="innerHTML"
+           hx-indicator=".htmx-indicator"
+           hx-push-url="true">목록</a>
+      {% endif %}
 
       {% if page_obj and page_obj.paginator.num_pages > 1 %}
         <div class="pager-nav">

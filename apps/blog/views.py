@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import urlencode
 from django.shortcuts import render, redirect
 from django.core.paginator import Paginator
 from django.http import HttpResponse
@@ -154,19 +155,40 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
     q = (request.GET.get("q") or "").strip()
     is_searching = bool(q)
 
+    # ---------------------------------------------
+    # Phase 3B: context-based navigation (Tag → Post detail → Back)
+    # ---------------------------------------------
+    src = (request.GET.get("src") or "").strip()
+    from_tag = (request.GET.get("from_tag") or "").strip()
+    from_page_raw = (request.GET.get("from_page") or "").strip()
+    from_q = (request.GET.get("from_q") or "").strip()
+
+    from_tags = (src == "tags" and bool(from_tag))
+    from_page = from_page_raw if from_page_raw.isdigit() else "1"
+
+    tags_back_url = ""
+    if from_tags:
+        params = {"page": from_page}
+        if from_q:
+            params["q"] = from_q
+        tags_back_url = f"/tags/{from_tag}/?{urlencode(params)}"
+
     sort = (request.GET.get("sort") or "new").strip()
     sort_options = get_sort_options()
     sort_keys = {v for v, _ in sort_options}
     if sort not in sort_keys:
         sort = "new"
 
+    # ✅ tag 파라미터(템플릿 호환)
     tag_slug = (request.GET.get("tag") or "").strip()
     selected_tag = None
+    tag_not_found = False
     if tag_slug:
         try:
             selected_tag = Tag.objects.get(slug=tag_slug)
         except Tag.DoesNotExist:
             selected_tag = None
+            tag_not_found = True
 
     # 빈 상태 UX용 카운트
     country_posts_total = 0
@@ -177,8 +199,11 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
     if selected_country:
         base_category_qs = base_category_qs.filter(country=selected_country)
 
+    # ✅ tag가 존재하지만 실제 태그가 없으면 "없는 태그"로 처리(일관 UX)
     if selected_tag:
         base_category_qs = base_category_qs.filter(tags=selected_tag)
+    elif tag_not_found:
+        base_category_qs = base_category_qs.none()
 
     category_posts_total = base_category_qs.count()
 
@@ -276,11 +301,21 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
         "q": q,
         "is_searching": is_searching,
 
+        # Tag-origin context (B안)
+        "from_tags": from_tags,
+        "from_tag": from_tag,
+        "from_page": from_page,
+        "from_q": from_q,
+        "tags_back_url": tags_back_url,
+
         "sort": sort,
         "sort_options": sort_options,
 
-        "selected_tag": selected_tag,
+        # ✅ 템플릿(_board.html) 호환을 위해 tag 유지
+        "tag": tag_slug,
         "tag_slug": tag_slug,
+        "selected_tag": selected_tag,
+        "tag_not_found": tag_not_found,
 
         # Empty-state UX counts
         "country_posts_total": country_posts_total,
