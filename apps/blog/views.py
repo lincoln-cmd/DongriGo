@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import re
-
 from django.shortcuts import render, redirect
 from django.core.paginator import Paginator
 from django.http import HttpResponse
-from django.db.models import Q, Prefetch
+from django.db.models import Q, Prefetch, Count
 from django.core.exceptions import FieldError
 
-# ✅ admin live preview용
+# admin live preview
 from django.views.decorators.http import require_POST
 from django.contrib.admin.views.decorators import staff_member_required
 
-from .models import Country, Tag, Post, PostImage, PostSlugHistory
+from .models import Country, Post, PostImage, PostSlugHistory, Tag
 
 
 def get_tabs():
@@ -24,10 +23,16 @@ def get_tabs():
     ]
 
 
+def get_sort_options():
+    # ✅ 보수적 최소: DB/운영 리스크 없는 정렬만
+    return [
+        ("new", "최신"),
+        ("old", "오래된"),
+        ("title", "제목"),
+    ]
+
+
 def resolve_selected_category(category_slug: str | None):
-    """
-    URL의 category_slug(travel/history/...) -> Post.Category 값으로 매핑
-    """
     mapping = {
         "travel": Post.Category.TRAVEL,
         "history": Post.Category.HISTORY,
@@ -42,21 +47,6 @@ def resolve_selected_category(category_slug: str | None):
     return cat, inv.get(cat, "travel")
 
 
-def resolve_sort(sort_key: str | None):
-    """정렬 옵션(보수적): 허용된 값만 인정하고, 그 외는 기본값으로 강제."""
-    key = (sort_key or "new").strip().lower()
-    allowed = {"new", "old", "title"}
-    if key not in allowed:
-        key = "new"
-
-    options = [
-        ("new", "최신"),
-        ("old", "오래된"),
-        ("title", "제목"),
-    ]
-    return key, options
-
-
 def is_htmx(request) -> bool:
     return (
         request.headers.get("HX-Request") == "true"
@@ -65,10 +55,6 @@ def is_htmx(request) -> bool:
 
 
 def _extract_used_image_ids_from_content(content: str) -> set[int]:
-    """
-    models.Post.used_image_ids()가 없을 때를 대비한 fallback.
-    본문 안의 [[img:123]] 토큰을 찾아 이미지 id 목록을 반환.
-    """
     if not content:
         return set()
     ids = set()
@@ -80,14 +66,37 @@ def _extract_used_image_ids_from_content(content: str) -> set[int]:
     return ids
 
 
+def _base_context_for_home(request):
+    """
+    home.html(좌: globe + 국가 리스트) 공통 컨텍스트
+    """
+    countries_qs = Country.objects.all()
+
+    # globe.js로 내려줄 데이터
+    try:
+        countries_for_globe = list(
+            countries_qs.values(
+                "name",
+                "name_ko",
+                "name_en",
+                "slug",
+                "aliases",
+                "iso_a2",
+                "iso_a3",
+            )
+        )
+    except FieldError:
+        countries_for_globe = list(countries_qs.values("name", "slug"))
+
+    return {
+        "countries": countries_qs,
+        "countries_for_globe": countries_for_globe,
+    }
+
+
 @staff_member_required
 @require_POST
 def admin_live_preview(request):
-    """
-    Admin에서 작성 중인 content를 서버 렌더 결과와 동일하게 미리보기.
-    - content: 본문 (필수)
-    - post_id: 기존 글 수정 시(선택) -> 해당 Post의 images 관계를 써서 [[img:ID]]도 제대로 렌더되게 함
-    """
     content = (request.POST.get("content") or "").strip()
     if content == "":
         return HttpResponse("", content_type="text/html; charset=utf-8")
@@ -108,10 +117,8 @@ def admin_live_preview(request):
             obj = None
 
     if obj is None:
-        # 새 글 작성 중: 임시 Post 객체로 렌더
         obj = Post(content=content)
     else:
-        # 기존 글 수정: images 관계는 유지하고 본문만 교체
         obj.content = content
 
     html = obj.rendered_content()
@@ -120,12 +127,12 @@ def admin_live_preview(request):
 
 def home(request, country_slug=None, category_slug=None, post_slug=None, **kwargs):
     """
-    메인 화면
+    메인 화면:
     - 좌: globe.gl
-    - 우: HTMX로 #board 부분 갱신
+    - 우: HTMX로 #boardContent 부분 갱신
     """
 
-    # URLConf/호출 방식이 섞여도 안전하게 보정(이전 이슈 방지용)
+    # URLConf/호출 방식이 섞여도 안전하게 보정
     if country_slug is None:
         country_slug = kwargs.get("country_slug") or kwargs.get("slug") or kwargs.get("country")
     if category_slug is None:
@@ -133,92 +140,64 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
     if post_slug is None:
         post_slug = kwargs.get("post_slug") or kwargs.get("post") or kwargs.get("postSlug")
 
-    countries_qs = Country.objects.all()
-
-    # globe.js로 내려줄 데이터
-    try:
-        countries_for_globe = list(
-            countries_qs.values(
-                "name",
-                "name_ko",
-                "name_en",
-                "slug",
-                "aliases",
-                "iso_a2",
-                "iso_a3",
-            )
-        )
-    except FieldError:
-        # 필드 구성이 다를 때도 최소 동작 보장
-        countries_for_globe = list(countries_qs.values("name", "slug"))
+    ctx = _base_context_for_home(request)
 
     selected_country = None
     if country_slug:
         try:
-            selected_country = countries_qs.get(slug=country_slug)
+            selected_country = Country.objects.get(slug=country_slug)
         except Country.DoesNotExist:
             selected_country = None
 
     selected_category, selected_category_slug = resolve_selected_category(category_slug)
 
-    # Phase 2: 목록 정렬 옵션(보수적: 허용된 값만 적용)
-    sort_key, sort_options = resolve_sort(request.GET.get("sort"))
-
     q = (request.GET.get("q") or "").strip()
     is_searching = bool(q)
 
-    # Phase 3 (최소): tag 필터
+    sort = (request.GET.get("sort") or "new").strip()
+    sort_options = get_sort_options()
+    sort_keys = {v for v, _ in sort_options}
+    if sort not in sort_keys:
+        sort = "new"
+
     tag_slug = (request.GET.get("tag") or "").strip()
     selected_tag = None
-    tag_not_found = False
     if tag_slug:
         try:
             selected_tag = Tag.objects.get(slug=tag_slug)
         except Tag.DoesNotExist:
-            tag_not_found = True
+            selected_tag = None
 
-    # -----------------------------
-    # Phase 2-2: 빈 상태 UX용 "카운트" 계산
-    # -----------------------------
+    # 빈 상태 UX용 카운트
     country_posts_total = 0
     if selected_country:
-        country_posts_total = (
-            Post.objects.filter(is_published=True, country=selected_country).count()
-        )
+        country_posts_total = Post.objects.filter(is_published=True, country=selected_country).count()
 
     base_category_qs = Post.objects.filter(is_published=True, category=selected_category)
     if selected_country:
         base_category_qs = base_category_qs.filter(country=selected_country)
+
+    if selected_tag:
+        base_category_qs = base_category_qs.filter(tags=selected_tag)
+
     category_posts_total = base_category_qs.count()
 
-    # -----------------------------
     # 목록 쿼리(검색 포함)
-    # -----------------------------
     posts_qs = base_category_qs
     if is_searching:
         posts_qs = posts_qs.filter(Q(title__icontains=q) | Q(content__icontains=q))
 
-    if tag_slug:
-        if selected_tag:
-            posts_qs = posts_qs.filter(tags=selected_tag)
-        else:
-            # 보수적: 존재하지 않는 tag면 빈 결과로 처리
-            posts_qs = posts_qs.none()
-
-    if sort_key == "old":
+    if sort == "old":
         posts_qs = posts_qs.order_by("published_at", "created_at", "id")
-    elif sort_key == "title":
-        posts_qs = posts_qs.order_by("title", "id")
+    elif sort == "title":
+        posts_qs = posts_qs.order_by("title", "-published_at", "-created_at", "-id")
     else:
         posts_qs = posts_qs.order_by("-published_at", "-created_at", "-id")
-
-    # 태그/상세에서 N+1 방지
-    posts_qs = posts_qs.prefetch_related("tags")
 
     paginator = Paginator(posts_qs, 10)
     page_obj = paginator.get_page(request.GET.get("page") or "1")
     posts = page_obj.object_list
-    search_results_total = page_obj.paginator.count  # 검색 적용 후 총 개수
+    search_results_total = page_obj.paginator.count
 
     selected_post = None
     selected_post_html = ""
@@ -230,9 +209,9 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
             selected_post = (
                 Post.objects
                 .prefetch_related(
-                    Prefetch("images", queryset=PostImage.objects.order_by("order", "id"))
+                    Prefetch("images", queryset=PostImage.objects.order_by("order", "id")),
+                    "tags",
                 )
-                .prefetch_related("tags")
                 .get(
                     country=selected_country,
                     category=selected_category,
@@ -241,16 +220,13 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
                 )
             )
 
-            # 본문 렌더
             selected_post_html = selected_post.rendered_content()
 
-            # 본문에 삽입된 이미지는 갤러리에서 제외
             if hasattr(selected_post, "used_image_ids") and callable(getattr(selected_post, "used_image_ids")):
                 used_ids = set(selected_post.used_image_ids())
             else:
                 used_ids = _extract_used_image_ids_from_content(selected_post.content)
 
-            # ✅ 갤러리도 order 기준으로 고정
             gallery_images = (
                 selected_post.images
                 .exclude(id__in=used_ids)
@@ -258,7 +234,7 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
             )
 
         except Post.DoesNotExist:
-            # ✅ 예전 slug 조합이면 최신 URL로 301 리다이렉트
+            # 예전 slug면 최신 URL로 301
             h = (
                 PostSlugHistory.objects
                 .select_related("post", "country")
@@ -283,43 +259,122 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
 
     category_path = f"/{selected_country.slug}/{selected_category_slug}/" if selected_country else "/"
 
-    context = {
-        "countries": countries_qs,
-        "countries_for_globe": countries_for_globe,
+    ctx.update({
+        "board_view": "country",  # ✅ home 기본 모드
+
         "selected_country": selected_country,
         "selected_category": selected_category,
         "selected_category_slug": selected_category_slug,
         "tabs": get_tabs(),
+
         "posts": posts,
         "page_obj": page_obj,
         "selected_post": selected_post,
         "selected_post_html": selected_post_html,
         "gallery_images": gallery_images,
+
         "q": q,
         "is_searching": is_searching,
 
-        # Phase 3 (최소): tag filter
-        "tag": tag_slug,
-        "selected_tag": selected_tag,
-        "tag_not_found": tag_not_found,
-
-        # Phase 2: sort option
-        "sort": sort_key,
+        "sort": sort,
         "sort_options": sort_options,
 
-        # Phase 2-2 (Empty state UX)
+        "selected_tag": selected_tag,
+        "tag_slug": tag_slug,
+
+        # Empty-state UX counts
         "country_posts_total": country_posts_total,
         "category_posts_total": category_posts_total,
         "search_results_total": search_results_total,
 
         "category_path": category_path,
-    }
+    })
 
-    # globe 클릭이 잘못된 slug를 보냈을 때: 보드 비우지 않게 204로 보수 처리
+    # globe 클릭이 잘못된 slug를 보냈을 때: 보드 비우지 않게 204
     if is_htmx(request) and country_slug and not selected_country:
         return HttpResponse("", status=204)
 
     if is_htmx(request):
-        return render(request, "blog/_board.html", context)
+        return render(request, "blog/_board.html", ctx)
 
-    return render(request, "blog/home.html", context)
+    return render(request, "blog/home.html", ctx)
+
+
+def tags_index(request):
+    """
+    /tags/ : 태그 목록 보드
+    """
+    ctx = _base_context_for_home(request)
+
+    tags = (
+        Tag.objects
+        .annotate(post_count=Count("posts", filter=Q(posts__is_published=True), distinct=True))
+        .filter(post_count__gt=0)
+        .order_by("name")
+    )
+
+    ctx.update({
+        "board_view": "tags",
+        "tags_mode": "index",
+        "tags": tags,
+        "selected_tag": None,
+    })
+
+    if is_htmx(request):
+        return render(request, "blog/_board_tags.html", ctx)
+
+    return render(request, "blog/home.html", ctx)
+
+
+def tag_detail(request, tag_slug: str):
+    """
+    /tags/<tag>/ : 태그 상세(게시물 목록) 보드
+    """
+    ctx = _base_context_for_home(request)
+
+    try:
+        tag = Tag.objects.get(slug=tag_slug)
+    except Tag.DoesNotExist:
+        # 보수적으로 홈으로
+        if is_htmx(request):
+            resp = HttpResponse("", status=204)
+            resp["HX-Redirect"] = "/tags/"
+            return resp
+        return redirect("/tags/")
+
+    q = (request.GET.get("q") or "").strip()
+    is_searching = bool(q)
+
+    posts_qs = (
+        Post.objects
+        .filter(is_published=True, tags=tag)
+        .select_related("country")
+        .prefetch_related("tags")
+        .order_by("-published_at", "-created_at", "-id")
+    )
+
+    if is_searching:
+        posts_qs = posts_qs.filter(Q(title__icontains=q) | Q(content__icontains=q))
+
+    paginator = Paginator(posts_qs, 20)
+    page_obj = paginator.get_page(request.GET.get("page") or "1")
+    posts = page_obj.object_list
+    total = page_obj.paginator.count
+
+    ctx.update({
+        "board_view": "tags",
+        "tags_mode": "detail",
+        "selected_tag": tag,
+
+        "q": q,
+        "is_searching": is_searching,
+
+        "posts": posts,
+        "page_obj": page_obj,
+        "tag_posts_total": total,
+    })
+
+    if is_htmx(request):
+        return render(request, "blog/_board_tags.html", ctx)
+
+    return render(request, "blog/home.html", ctx)

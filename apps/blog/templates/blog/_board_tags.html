@@ -1,0 +1,146 @@
+{% load highlight %}
+
+<div data-has-country="0" hidden></div>
+<div data-has-post="0" hidden></div>
+
+<div class="board-sticky">
+  <div class="board-header">
+    <div>
+      {% if tags_mode == "detail" and selected_tag %}
+        <h2 class="tags-title">
+          <span>Tag</span>
+          <span class="tags-chip">#{{ selected_tag.name }}</span>
+          {% if tag_posts_total is not None %}
+            <span class="hint">({{ tag_posts_total }})</span>
+          {% endif %}
+        </h2>
+      {% else %}
+        <h2 class="tags-title">Tags</h2>
+      {% endif %}
+    </div>
+
+    <a class="close-btn js-close" href="/">닫기</a>
+  </div>
+
+  {% if tags_mode == "detail" and selected_tag %}
+    <div class="tags-toolbar">
+      <a class="hint"
+         href="/tags/"
+         hx-get="/tags/"
+         hx-target="#boardContent"
+         hx-swap="innerHTML"
+         hx-indicator=".htmx-indicator"
+         hx-push-url="true">← 태그 목록</a>
+
+      <form class="tags-search"
+            action="/tags/{{ selected_tag.slug }}/" method="get"
+            hx-get="/tags/{{ selected_tag.slug }}/"
+            hx-target="#boardContent"
+            hx-swap="innerHTML"
+            hx-indicator=".htmx-indicator"
+            hx-push-url="true"
+            autocomplete="off">
+        <input class="search-input" type="text" name="q" value="{{ q|default:'' }}"
+               placeholder="태그 내 검색(제목/본문)" />
+        <input type="hidden" name="page" value="1" />
+        <button class="search-btn" type="submit">검색</button>
+      </form>
+    </div>
+
+    {% if q %}
+      <div style="margin-top:8px;">
+        <a class="hint"
+           href="/tags/{{ selected_tag.slug }}/?page=1"
+           hx-get="/tags/{{ selected_tag.slug }}/?page=1"
+           hx-target="#boardContent"
+           hx-swap="innerHTML"
+           hx-indicator=".htmx-indicator"
+           hx-push-url="true">검색 해제</a>
+      </div>
+    {% endif %}
+  {% endif %}
+</div>
+
+{% if tags_mode == "detail" and selected_tag %}
+  <div class="tags-posts">
+    {% for p in posts %}
+      <a class="tag-post-link"
+         href="{{ p.get_absolute_url }}"
+         hx-get="{{ p.get_absolute_url }}"
+         hx-target="#boardContent"
+         hx-swap="innerHTML"
+         hx-indicator=".htmx-indicator"
+         hx-push-url="true">
+        <div class="tag-post-title">{{ p.title|highlight:q }}</div>
+        <div class="tag-post-meta hint">
+          <span>{{ p.country.name }}</span>
+          <span>·</span>
+          <span>{{ p.get_category_display }}</span>
+          {% if p.published_at %}
+            <span>·</span>
+            <span>{{ p.published_at }}</span>
+          {% endif %}
+        </div>
+      </a>
+    {% empty %}
+      {% if q %}
+        <div class="board-emptybox">
+          <div class="board-emptytitle">검색 결과가 없습니다</div>
+          <div class="hint">다른 키워드로 검색하거나, 검색을 해제해 보세요.</div>
+        </div>
+      {% else %}
+        <div class="board-emptybox">
+          <div class="board-emptytitle">이 태그에는 아직 글이 없습니다</div>
+          <div class="hint">다른 태그를 선택해 보세요.</div>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  {% if page_obj and page_obj.paginator.num_pages > 1 %}
+    <div class="pager">
+      <div class="pager-nav">
+        {% if page_obj.has_previous %}
+          <a href="/tags/{{ selected_tag.slug }}/?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
+             hx-get="/tags/{{ selected_tag.slug }}/?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
+             hx-target="#boardContent" hx-swap="innerHTML"
+             hx-indicator=".htmx-indicator" hx-push-url="true">이전</a>
+        {% else %}
+          <span class="hint">이전</span>
+        {% endif %}
+
+        <span class="hint">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+
+        {% if page_obj.has_next %}
+          <a href="/tags/{{ selected_tag.slug }}/?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
+             hx-get="/tags/{{ selected_tag.slug }}/?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}"
+             hx-target="#boardContent" hx-swap="innerHTML"
+             hx-indicator=".htmx-indicator" hx-push-url="true">다음</a>
+        {% else %}
+          <span class="hint">다음</span>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+{% else %}
+  <div class="tags-list">
+    {% for t in tags %}
+      <a class="tag-chip-link"
+         href="/tags/{{ t.slug }}/"
+         hx-get="/tags/{{ t.slug }}/"
+         hx-target="#boardContent"
+         hx-swap="innerHTML"
+         hx-indicator=".htmx-indicator"
+         hx-push-url="true">
+        <span class="tag-chip">#{{ t.name }}</span>
+        <span class="hint">({{ t.post_count }})</span>
+      </a>
+    {% empty %}
+      <div class="board-emptybox">
+        <div class="board-emptytitle">표시할 태그가 없습니다</div>
+        <div class="hint">게시물에 태그를 추가하면 여기에 표시됩니다.</div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
