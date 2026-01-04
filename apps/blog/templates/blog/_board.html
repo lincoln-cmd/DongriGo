@@ -139,15 +139,15 @@
   <div class="toc">
     {% for p in posts %}
       <a class="toc-link {% if selected_post and selected_post.slug == p.slug %}active{% endif %}"
-         href="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}{% if from_tags %}&src=tags&from_tag={{ from_tag|urlencode }}&from_page={{ from_page }}{% if from_q %}&from_q={{ from_q|urlencode }}{% endif %}{% endif %}"
-         hx-get="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}{% if from_tags %}&src=tags&from_tag={{ from_tag|urlencode }}&from_page={{ from_page }}{% if from_q %}&from_q={{ from_q|urlencode }}{% endif %}{% endif %}"
+         href="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}{% if from_tags %}&src=tags&from_tag={{ from_tag|urlencode }}&from_page={{ from_page }}{% if from_q %}&from_q={{ from_q|urlencode }}{% endif %}{% if from_sort and from_sort != 'new' %}&from_sort={{ from_sort|urlencode }}{% endif %}{% endif %}"
+         hx-get="/{{ selected_country.slug }}/{{ selected_category_slug }}/{{ p.slug }}/?page={% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}{% if tag %}&tag={{ tag|urlencode }}{% endif %}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}{% if from_tags %}&src=tags&from_tag={{ from_tag|urlencode }}&from_page={{ from_page }}{% if from_q %}&from_q={{ from_q|urlencode }}{% endif %}{% if from_sort and from_sort != 'new' %}&from_sort={{ from_sort|urlencode }}{% endif %}{% endif %}"
          hx-target="#boardContent"
          hx-swap="innerHTML"
          hx-indicator=".htmx-indicator"
          hx-push-url="true">
-    
+
         <div class="toc-title">{{ p.title|highlight:q }}</div>
-    
+
         <div class="toc-meta hint">
           {% if p.published_at %}
             {{ p.published_at|date:"Y-m-d" }}
@@ -281,20 +281,6 @@
     <div class="content" id="postContent">
       <h3 style="margin:0 0 8px 0;">{{ selected_post.title }}</h3>
 
-      {% if selected_post.tags.all %}
-        <div class="post-tags" aria-label="Post tags">
-          {% for t in selected_post.tags.all %}
-            <a class="tag-chip"
-               href="/tags/{{ t.slug|urlencode }}/?page=1"
-               hx-get="/tags/{{ t.slug|urlencode }}/?page=1"
-               hx-target="#boardContent"
-               hx-swap="innerHTML"
-               hx-indicator=".htmx-indicator"
-               hx-push-url="true">#{{ t.name }}</a>
-          {% endfor %}
-        </div>
-      {% endif %}
-
       {% if selected_post.cover_image %}
         <img
           src="{{ selected_post.cover_image.url|cld_transform:'w_760,c_limit,q_auto,f_auto' }}"
@@ -332,6 +318,25 @@
           {% endfor %}
         </div>
       {% endif %}
+
+      {# ✅ 태그: 글 맨 아래(갤러리 아래) #}
+      {% if selected_post.tags.exists %}
+        <div class="post-tags" aria-label="Post tags" style="margin-top:16px;">
+          {% for t in selected_post.tags.all %}
+            <a class="tag-chip-link"
+               href="/tags/{{ t.slug }}/"
+               hx-get="/tags/{{ t.slug }}/"
+               hx-target="#boardContent"
+               hx-swap="innerHTML"
+               hx-indicator=".htmx-indicator"
+               hx-push-url="true">
+              <span class="tag-chip">#{{ t.name }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+
     </div>
   {% else %}
     <div class="hint" style="margin-top:12px;">목차에서 글 제목을 클릭하면 내용이 여기에 표시됩니다.</div>
