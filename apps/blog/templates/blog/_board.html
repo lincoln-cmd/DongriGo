@@ -145,9 +145,19 @@
          hx-swap="innerHTML"
          hx-indicator=".htmx-indicator"
          hx-push-url="true">
-        {{ p.title|highlight:q }}
+    
+        <div class="toc-title">{{ p.title|highlight:q }}</div>
+    
+        <div class="toc-meta hint">
+          {% if p.published_at %}
+            {{ p.published_at|date:"Y-m-d" }}
+          {% else %}
+            {{ p.created_at|date:"Y-m-d" }}
+          {% endif %}
+        </div>
       </a>
     {% empty %}
+
       {% if q %}
         <div class="board-emptybox">
           <div class="board-emptytitle">검색 결과가 없습니다</div>
@@ -275,8 +285,8 @@
         <div class="post-tags" aria-label="Post tags">
           {% for t in selected_post.tags.all %}
             <a class="tag-chip"
-               href="{{ category_path }}?page=1{% if q %}&q={{ q|urlencode }}{% endif %}&tag={{ t.slug|urlencode }}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
-               hx-get="{{ category_path }}?page=1{% if q %}&q={{ q|urlencode }}{% endif %}&tag={{ t.slug|urlencode }}{% if sort and sort != 'new' %}&sort={{ sort|urlencode }}{% endif %}"
+               href="/tags/{{ t.slug|urlencode }}/?page=1"
+               hx-get="/tags/{{ t.slug|urlencode }}/?page=1"
                hx-target="#boardContent"
                hx-swap="innerHTML"
                hx-indicator=".htmx-indicator"
