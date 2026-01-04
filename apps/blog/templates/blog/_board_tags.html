@@ -18,6 +18,9 @@
         </h2>
       {% else %}
         <h2 class="tags-title">Tags</h2>
+        {% if tags_count is not None %}
+          <span class="hint" style="margin-left:6px;">({{ tags_count }})</span>
+        {% endif %}
       {% endif %}
     </div>
 
@@ -54,6 +57,35 @@
         <a class="hint"
            href="/tags/{{ selected_tag.slug }}/?page=1"
            hx-get="/tags/{{ selected_tag.slug }}/?page=1"
+           hx-target="#boardContent"
+           hx-swap="innerHTML"
+           hx-indicator=".htmx-indicator"
+           hx-push-url="true">검색 해제</a>
+      </div>
+    {% endif %}
+
+  {% else %}
+    {# ✅ tags_mode == "index": 태그 목록 검색 #}
+    <div class="tags-toolbar">
+      <form class="tags-search"
+            action="/tags/" method="get"
+            hx-get="/tags/"
+            hx-target="#boardContent"
+            hx-swap="innerHTML"
+            hx-indicator=".htmx-indicator"
+            hx-push-url="true"
+            autocomplete="off">
+        <input class="search-input" type="text" name="q" value="{{ q|default:'' }}"
+               placeholder="태그 검색(이름)" />
+        <button class="search-btn" type="submit">검색</button>
+      </form>
+    </div>
+
+    {% if q %}
+      <div style="margin-top:8px;">
+        <a class="hint"
+           href="/tags/"
+           hx-get="/tags/"
            hx-target="#boardContent"
            hx-swap="innerHTML"
            hx-indicator=".htmx-indicator"
@@ -135,14 +167,21 @@
          hx-swap="innerHTML"
          hx-indicator=".htmx-indicator"
          hx-push-url="true">
-        <span class="tag-chip">#{{ t.name }}</span>
+        <span class="tag-chip">#{{ t.name|highlight:q }}</span>
         <span class="hint">({{ t.post_count }})</span>
       </a>
     {% empty %}
-      <div class="board-emptybox">
-        <div class="board-emptytitle">표시할 태그가 없습니다</div>
-        <div class="hint">게시물에 태그를 추가하면 여기에 표시됩니다.</div>
-      </div>
+      {% if q %}
+        <div class="board-emptybox">
+          <div class="board-emptytitle">검색 결과가 없습니다</div>
+          <div class="hint">다른 키워드로 검색하거나, 검색을 해제해 보세요.</div>
+        </div>
+      {% else %}
+        <div class="board-emptybox">
+          <div class="board-emptytitle">표시할 태그가 없습니다</div>
+          <div class="hint">게시물에 태그를 추가하면 여기에 표시됩니다.</div>
+        </div>
+      {% endif %}
     {% endfor %}
   </div>
 {% endif %}
