@@ -120,10 +120,19 @@
       }
 
       if (e.key === "Enter") {
-        // 활성 항목이 있으면 그 국가로 이동
+        // ✅ Doc 요청 방지: HTMX 링크면 클릭 이벤트로 트리거해서 XHR로 처리
         const target = links[activeIdx] || vis[0];
         if (target && target.href) {
           e.preventDefault();
+
+          // hx-get이 있거나 htmx가 로드되어 있으면 "클릭"을 발생시켜 htmx가 가로채게 한다.
+          if (window.htmx && (target.getAttribute("hx-get") || target.hasAttribute("data-hx-get"))) {
+            const evt = new MouseEvent("click", { bubbles: true, cancelable: true, view: window });
+            target.dispatchEvent(evt);
+            return;
+          }
+
+          // fallback: htmx가 없거나 hx 속성이 없으면 일반 이동
           window.location.href = target.href;
         }
       }
