@@ -323,18 +323,37 @@
       {% if selected_post.tags.exists %}
         <div class="post-tags" aria-label="Post tags" style="margin-top:16px;">
           {% for t in selected_post.tags.all %}
-            <a class="tag-chip-link"
-               href="/tags/{{ t.slug }}/"
-               hx-get="/tags/{{ t.slug }}/"
-               hx-target="#boardContent"
-               hx-swap="innerHTML"
-               hx-indicator=".htmx-indicator"
-               hx-push-url="true">
-              <span class="tag-chip">#{{ t.name }}</span>
-            </a>
+            {% if from_tags %}
+              {# 태그에서 들어온 상세면: 태그 상세 진입에도 컨텍스트 유지 #}
+              <a class="tag-chip-link"
+                 href="/tags/{{ t.slug|urlencode }}/?page={{ from_page|default:'1' }}{% if from_q %}&q={{ from_q|urlencode }}{% endif %}{% if from_sort and from_sort != 'new' %}&sort={{ from_sort|urlencode }}{% endif %}"
+                 hx-get="/tags/{{ t.slug|urlencode }}/?page={{ from_page|default:'1' }}{% if from_q %}&q={{ from_q|urlencode }}{% endif %}{% if from_sort and from_sort != 'new' %}&sort={{ from_sort|urlencode }}{% endif %}"
+                 hx-target="#boardContent"
+                 hx-swap="innerHTML"
+                 hx-indicator=".htmx-indicator"
+                 hx-push-url="true">
+                <span class="tag-chip">#{{ t.name }}</span>
+              </a>
+            {% else %}
+              {# 일반 상세면: 단순 이동(기존 동작 유지) #}
+              <a class="tag-chip-link"
+                 href="/tags/{{ t.slug|urlencode }}/"
+                 hx-get="/tags/{{ t.slug|urlencode }}/"
+                 hx-target="#boardContent"
+                 hx-swap="innerHTML"
+                 hx-indicator=".htmx-indicator"
+                 hx-push-url="true">
+                <span class="tag-chip">#{{ t.name }}</span>
+              </a>
+            {% endif %}
           {% endfor %}
         </div>
       {% endif %}
+
+      
+      
+      
+      
 
 
     </div>
