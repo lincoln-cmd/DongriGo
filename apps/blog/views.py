@@ -179,7 +179,7 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
     if sort not in sort_keys:
         sort = "new"
 
-    # ✅ tag 파라미터(템플릿 호환)
+    # ✅ 국가 보드 내 tag 필터 (?tag=<slug>)
     tag_slug = (request.GET.get("tag") or "").strip()
     selected_tag = None
     tag_not_found = False
@@ -199,7 +199,6 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
     if selected_country:
         base_category_qs = base_category_qs.filter(country=selected_country)
 
-    # ✅ tag가 존재하지만 실제 태그가 없으면 "없는 태그"로 처리(일관 UX)
     if selected_tag:
         base_category_qs = base_category_qs.filter(tags=selected_tag)
     elif tag_not_found:
@@ -311,7 +310,7 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
         "sort": sort,
         "sort_options": sort_options,
 
-        # ✅ 템플릿(_board.html) 호환을 위해 tag 유지
+        # ✅ _board.html 호환(많이 참조함)
         "tag": tag_slug,
         "tag_slug": tag_slug,
         "selected_tag": selected_tag,
@@ -337,22 +336,34 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
 
 def tags_index(request):
     """
-    /tags/ : 태그 목록 보드
+    /tags/ : 태그 목록 보드 (+ 태그 검색)
     """
     ctx = _base_context_for_home(request)
+
+    q = (request.GET.get("q") or "").strip()
+    is_searching = bool(q)
 
     tags = (
         Tag.objects
         .annotate(post_count=Count("posts", filter=Q(posts__is_published=True), distinct=True))
         .filter(post_count__gt=0)
-        .order_by("name")
     )
+
+    if is_searching:
+        # ✅ 보수적: name/slug만 검색
+        tags = tags.filter(Q(name__icontains=q) | Q(slug__icontains=q))
+
+    tags = tags.order_by("name")
 
     ctx.update({
         "board_view": "tags",
         "tags_mode": "index",
         "tags": tags,
         "selected_tag": None,
+
+        "q": q,
+        "is_searching": is_searching,
+        "tags_count": tags.count(),
     })
 
     if is_htmx(request):
@@ -370,7 +381,7 @@ def tag_detail(request, tag_slug: str):
     try:
         tag = Tag.objects.get(slug=tag_slug)
     except Tag.DoesNotExist:
-        # 보수적으로 홈으로
+        # 보수적으로 태그 목록으로
         if is_htmx(request):
             resp = HttpResponse("", status=204)
             resp["HX-Redirect"] = "/tags/"
