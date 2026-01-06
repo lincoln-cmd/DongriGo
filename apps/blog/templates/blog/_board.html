@@ -319,10 +319,10 @@
         </div>
       {% endif %}
 
-      {# ✅ 태그: 글 맨 아래(갤러리 아래) #}
-      {% if selected_post.tags.exists %}
-        <div class="post-tags" aria-label="Post tags" style="margin-top:16px;">
-          {% for t in selected_post.tags.all %}
+      {# ✅ 태그: 글 맨 아래(갤러리 아래) / ✅ 정렬+중복제거는 view에서 post_tags로 처리 #}
+      {% if post_tags %}
+        <div class="post-tags post-tags--wrap" aria-label="Post tags">
+          {% for t in post_tags %}
             {% if from_tags %}
               {# 태그에서 들어온 상세면: 태그 상세 진입에도 컨텍스트 유지 #}
               <a class="tag-chip-link"
@@ -349,12 +349,6 @@
           {% endfor %}
         </div>
       {% endif %}
-
-      
-      
-      
-      
-
 
     </div>
   {% else %}

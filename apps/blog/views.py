@@ -239,6 +239,9 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
     selected_post_html = ""
     gallery_images = None
 
+    # ✅ 게시물 상세 하단 태그(표시용): 정렬 + slug 기준 중복 제거
+    post_tags = []
+
     # 상세
     if post_slug and selected_country:
         try:
@@ -269,6 +272,19 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
                 .order_by("order", "id")
             )
 
+            # ✅ 태그 정렬/중복 제거 (prefetch 캐시 활용 → 불필요 쿼리 방지)
+            raw_tags = list(selected_post.tags.all())
+            raw_tags.sort(key=lambda t: ((t.name or "").casefold(), (t.slug or "").casefold()))
+            seen_slugs = set()
+            for t in raw_tags:
+                slug = (t.slug or "").strip()
+                if not slug:
+                    continue
+                if slug in seen_slugs:
+                    continue
+                seen_slugs.add(slug)
+                post_tags.append(t)
+
         except Post.DoesNotExist:
             # 예전 slug면 최신 URL로 301
             h = (
@@ -292,6 +308,7 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
                 return redirect(new_url, permanent=True)
 
             selected_post = None
+            post_tags = []
 
     category_path = f"/{selected_country.slug}/{selected_category_slug}/" if selected_country else "/"
 
@@ -308,6 +325,9 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
         "selected_post": selected_post,
         "selected_post_html": selected_post_html,
         "gallery_images": gallery_images,
+
+        # ✅ 게시물 상세 태그(표시용)
+        "post_tags": post_tags,
 
         "q": q,
         "is_searching": is_searching,
