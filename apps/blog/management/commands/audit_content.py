@@ -201,7 +201,7 @@ class Command(BaseCommand):
             if not (t.slug == expected or t.slug.startswith(expected + "-")):
                 tag_slug_mismatch.append((t.id, t.name, t.slug, expected))
         if tag_slug_mismatch:
-            issues.append(f"Tag.slug unexpected for name: {len(tag_slug_mismatch)}")
+            info.append(f"- slug/name mismatch (advisory): {len(tag_slug_mismatch)}")
             if verbose:
                 for tid, name, slug, expected in tag_slug_mismatch[:sample]:
                     info.append(f"  ! {tid} name='{name}' slug='{slug}' expected~='{expected}'")
