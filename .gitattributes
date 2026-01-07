@@ -1,0 +1,2 @@
+# Keep requirements.txt normalized (LF) to avoid noisy diffs on Windows
+requirements.txt text eol=lf
