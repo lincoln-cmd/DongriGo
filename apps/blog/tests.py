@@ -49,10 +49,14 @@ class FixSlugHistoryCommandTests(TestCase):
         call_command("fix_slug_history", "--apply")
         self.assertEqual(PostSlugHistory.objects.count(), 0)
 
+
+
+from urllib.parse import urlsplit
 from django.urls import reverse
-from django.utils.encoding import iri_to_uri
+from django.utils.encoding import uri_to_iri
 
 from apps.blog.models import Tag, TagSlugAlias
+from django.utils.encoding import iri_to_uri
 
 
 class TagAliasRedirectTests(TestCase):
@@ -66,6 +70,9 @@ class TagAliasRedirectTests(TestCase):
         self.assertIn(resp.status_code, (301, 302))
 
         target = reverse("blog:tag_detail", kwargs={"tag_slug": "온천"})
-        expected = iri_to_uri(target)  # ✅ "/tags/%EC%98%A8%EC%B2%9C/"
-        self.assertTrue(resp["Location"].endswith(expected))
+
+        loc_path = urlsplit(resp["Location"]).path
+        
+        # ✅ 둘 다 "URI(퍼센트 인코딩)"로 정규화해서 비교
+        self.assertEqual(iri_to_uri(loc_path), iri_to_uri(target))
 
