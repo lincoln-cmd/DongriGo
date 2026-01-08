@@ -1,5 +1,5 @@
 # apps/blog/urls.py
-from django.urls import path
+from django.urls import path, re_path
 from . import views
 
 app_name = "blog"
@@ -10,7 +10,10 @@ urlpatterns = [
 
     # ✅ Phase 3: Tag pages (MUST be above country slug routes)
     path("tags/", views.tags_index, name="tags_index"),
-    path("tags/<slug:tag_slug>/", views.tag_detail, name="tag_detail"),
+
+    # ✅ allow unicode tag slugs (e.g., /tags/온천/)
+    # - path converter <slug:...> is ASCII-limited, so use re_path.
+    re_path(r"^tags/(?P<tag_slug>[^/]+)/$", views.tag_detail, name="tag_detail"),
 
     # main
     path("", views.home, name="home"),
