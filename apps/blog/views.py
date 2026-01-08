@@ -7,8 +7,9 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import FieldError
 from django.core.paginator import Paginator
 from django.db.models import Count, Prefetch, Q
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from .models import Country, Post, PostImage, PostSlugHistory, Tag, TagSlugAlias
@@ -409,13 +410,16 @@ def tags_index(request):
 def tag_detail(request, tag_slug: str):
     """
     /tags/<tag>/ : 태그 상세(게시물 목록) 보드 (+ 검색 + 정렬)
+
+    ✅ 중요: alias(old_slug)로 들어오면 canonical(Tag.slug)로 redirect
+      - redirect URL은 f-string이 아니라 reverse()로 생성해서 URLConf/인코딩 규칙과 일치
+      - self-redirect(/tags/spa/ -> /tags/spa/) 방지
+      - querystring 유지
     """
     ctx = _base_context_for_home(request)
 
-    try:
-        tag = Tag.objects.get(slug=tag_slug)
-    except Tag.DoesNotExist:
-        # ✅ alias slug면 canonical slug로 redirect (querystring 유지)
+    tag = Tag.objects.filter(slug=tag_slug).first()
+    if tag is None:
         alias = (
             TagSlugAlias.objects
             .select_related("tag")
@@ -423,23 +427,28 @@ def tag_detail(request, tag_slug: str):
             .first()
         )
         if alias and alias.tag:
-            qs = request.META.get("QUERY_STRING") or ""
-            target = f"/tags/{alias.tag.slug}/"
-            if qs:
-                target = f"{target}?{qs}"
+            canonical_slug = (alias.tag.slug or "").strip()
+            if canonical_slug and canonical_slug != tag_slug:
+                qs = request.META.get("QUERY_STRING") or ""
+                target = reverse("blog:tag_detail", kwargs={"tag_slug": canonical_slug})
+                if qs:
+                    target = f"{target}?{qs}"
 
+                if is_htmx(request):
+                    resp = HttpResponse("", status=204)
+                    resp["HX-Redirect"] = target
+                    return resp
+                return redirect(target, permanent=True)
+
+            # canonical_slug == tag_slug(또는 비정상)일 때는 루프 방지: 그대로 렌더
+            tag = alias.tag
+        else:
+            # alias도 아니면 tags index로
             if is_htmx(request):
                 resp = HttpResponse("", status=204)
-                resp["HX-Redirect"] = target
+                resp["HX-Redirect"] = reverse("blog:tags_index")
                 return resp
-            return redirect(target, permanent=True)
-
-        # alias도 아니면 tags index로
-        if is_htmx(request):
-            resp = HttpResponse("", status=204)
-            resp["HX-Redirect"] = "/tags/"
-            return resp
-        return redirect("/tags/")
+            return redirect(reverse("blog:tags_index"))
 
     q = (request.GET.get("q") or "").strip()
     is_searching = bool(q)
