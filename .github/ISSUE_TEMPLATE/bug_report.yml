@@ -1,0 +1,57 @@
+name: Bug report
+description: 기능 오작동/에러 리포트
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 요약
+      description: 무엇이 어떻게 깨졌는지 한 문단으로
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 재현 절차
+      description: 단계별로 (1) (2) (3)
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대 결과
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 실제 결과(에러 로그 포함)
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: 환경
+      description: 로컬/Render, OS, 브라우저 등
+      placeholder: |
+        - local/render:
+        - OS:
+        - Browser:
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: 추가 메모
+    validations:
+      required: false

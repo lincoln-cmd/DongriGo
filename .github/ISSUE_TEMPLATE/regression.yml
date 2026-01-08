@@ -1,0 +1,49 @@
+name: Regression (re-occurred issue)
+description: 과거 해결된 문제가 다시 재발했을 때
+title: "[regression] "
+labels: ["bug", "regression"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 요약
+      description: 무엇이 재발했는지
+    validations:
+      required: true
+
+  - type: input
+    id: last_good
+    attributes:
+      label: 마지막 정상 기준점(스냅샷 태그/커밋)
+      placeholder: "snapshot/..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: current
+    attributes:
+      label: 현재 기준점(스냅샷 태그/커밋)
+      placeholder: |
+        - commit/tag:
+        - PR:
+    validations:
+      required: false
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 재현 절차
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suspected
+    attributes:
+      label: 의심 범위(있으면)
+      description: 변경 파일/기능 영역 등
+    validations:
+      required: false
