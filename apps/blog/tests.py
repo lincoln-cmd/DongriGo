@@ -48,3 +48,19 @@ class FixSlugHistoryCommandTests(TestCase):
 
         call_command("fix_slug_history", "--apply")
         self.assertEqual(PostSlugHistory.objects.count(), 0)
+
+from django.urls import reverse
+
+from apps.blog.models import Tag, TagSlugAlias
+
+class TagAliasRedirectTests(TestCase):
+    def test_tag_detail_redirects_from_alias(self):
+        t = Tag.objects.create(name="온천", slug="온천")
+        TagSlugAlias.objects.create(tag=t, old_slug="spa")
+
+        url = reverse("blog:tag_detail", kwargs={"tag_slug": "spa"})
+        resp = self.client.get(url)
+        self.assertIn(resp.status_code, (301, 302))
+
+        target = reverse("blog:tag_detail", kwargs={"tag_slug": "온천"})
+        self.assertTrue(resp["Location"].endswith(target))

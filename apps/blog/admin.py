@@ -14,6 +14,7 @@ except Exception:
 
 import re
 
+from apps.blog.models import TagSlugAlias
 
 def _normalize_aliases(raw: str) -> str:
     """aliases를 'comma+space' 포맷으로 정규화."""
@@ -476,3 +477,10 @@ class PostImageAdmin(admin.ModelAdmin):
         except Exception:
             return "-"
     thumb.short_description = "Preview"
+    
+
+@admin.register(TagSlugAlias)
+class TagSlugAliasAdmin(admin.ModelAdmin):
+    list_display = ("old_slug", "tag", "created_at")
+    search_fields = ("old_slug", "tag__name", "tag__slug")
+    readonly_fields = ("created_at",)

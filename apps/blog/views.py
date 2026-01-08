@@ -11,7 +11,7 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
-from .models import Country, Post, PostImage, PostSlugHistory, Tag
+from .models import Country, Post, PostImage, PostSlugHistory, Tag, TagSlugAlias
 
 
 def get_tabs():
@@ -415,6 +415,26 @@ def tag_detail(request, tag_slug: str):
     try:
         tag = Tag.objects.get(slug=tag_slug)
     except Tag.DoesNotExist:
+        # ✅ alias slug면 canonical slug로 redirect (querystring 유지)
+        alias = (
+            TagSlugAlias.objects
+            .select_related("tag")
+            .filter(old_slug=tag_slug)
+            .first()
+        )
+        if alias and alias.tag:
+            qs = request.META.get("QUERY_STRING") or ""
+            target = f"/tags/{alias.tag.slug}/"
+            if qs:
+                target = f"{target}?{qs}"
+
+            if is_htmx(request):
+                resp = HttpResponse("", status=204)
+                resp["HX-Redirect"] = target
+                return resp
+            return redirect(target, permanent=True)
+
+        # alias도 아니면 tags index로
         if is_htmx(request):
             resp = HttpResponse("", status=204)
             resp["HX-Redirect"] = "/tags/"

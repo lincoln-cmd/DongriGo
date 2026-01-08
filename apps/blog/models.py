@@ -391,3 +391,17 @@ class PostSlugHistory(models.Model):
 
     def __str__(self):
         return f"{self.country.slug}/{self.category}:{self.old_slug} -> post:{self.post_id}"
+
+class TagSlugAlias(models.Model):
+    tag = models.ForeignKey("Tag", on_delete=models.CASCADE, related_name="slug_aliases")
+    old_slug = models.SlugField(max_length=80, unique=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["old_slug"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.old_slug} -> {self.tag.slug}"
