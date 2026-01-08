@@ -50,8 +50,10 @@ class FixSlugHistoryCommandTests(TestCase):
         self.assertEqual(PostSlugHistory.objects.count(), 0)
 
 from django.urls import reverse
+from django.utils.encoding import iri_to_uri
 
 from apps.blog.models import Tag, TagSlugAlias
+
 
 class TagAliasRedirectTests(TestCase):
     def test_tag_detail_redirects_from_alias(self):
@@ -60,7 +62,10 @@ class TagAliasRedirectTests(TestCase):
 
         url = reverse("blog:tag_detail", kwargs={"tag_slug": "spa"})
         resp = self.client.get(url)
+
         self.assertIn(resp.status_code, (301, 302))
 
         target = reverse("blog:tag_detail", kwargs={"tag_slug": "온천"})
-        self.assertTrue(resp["Location"].endswith(target))
+        expected = iri_to_uri(target)  # ✅ "/tags/%EC%98%A8%EC%B2%9C/"
+        self.assertTrue(resp["Location"].endswith(expected))
+
