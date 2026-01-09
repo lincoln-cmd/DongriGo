@@ -204,6 +204,15 @@ python manage.py check_integrity --fix --json
 
 ---
 
+## Docs / Runbooks
+- [Runbook: audit_content](docs/runbook_audit_content.md)
+- [Runbook: fix_country_iso](docs/runbook_fix_country_iso.md)
+- [Runbook: fix_slug_history](docs/runbook_fix_slug_history.md)
+- [Runbook: release & snapshot](docs/runbook_release_and_snapshot.md)
+
+
+---
+
 ## Notes / Troubleshooting
 
 ### 1) Render에서 `ModuleNotFoundError: No module named 'app'`
