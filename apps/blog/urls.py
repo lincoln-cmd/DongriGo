@@ -10,7 +10,8 @@ urlpatterns = [
 
     # ✅ Phase 3: Tag pages (MUST be above country slug routes)
     path("tags/", views.tags_index, name="tags_index"),
-    path("tags/<slug:tag_slug>/", views.tag_detail, name="tag_detail"),
+    # IMPORTANT: use <str:...> to allow unicode tag slugs (e.g., '온천')
+    path("tags/<str:tag_slug>/", views.tag_detail, name="tag_detail"),
 
     # main
     path("", views.home, name="home"),
