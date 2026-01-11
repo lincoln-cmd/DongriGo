@@ -209,7 +209,8 @@ python manage.py check_integrity --fix --json
 - [Runbook: fix_country_iso](docs/runbook_fix_country_iso.md)
 - [Runbook: fix_slug_history](docs/runbook_fix_slug_history.md)
 - [Runbook: release & snapshot](docs/runbook_release_and_snapshot.md)
-
+- [Runbook: Tag slug 변경 운영 절차](docs/runbook_tag_slug_changes.md)
+- [Runbook: GitLab/Bitbucket 수동 백업](docs/runbook_backup_mirrors.md)
 
 ---
 
