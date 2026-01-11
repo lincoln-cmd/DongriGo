@@ -81,7 +81,8 @@ class Tag(models.Model):
     - created_at 없음(현재 DB 에러 원인 제거)
     """
     name = models.CharField(max_length=50, unique=True)
-    slug = models.SlugField(max_length=60, unique=True)
+    # ✅ Unicode slug 허용 (예: '온천')
+    slug = models.SlugField(max_length=60, unique=True, allow_unicode=True)
 
     class Meta:
         ordering = ["name"]
@@ -112,9 +113,50 @@ class Tag(models.Model):
             n += 1
 
     def save(self, *args, **kwargs):
+        """
+        - slug 변경 시 TagSlugHistory에 이전 slug 저장
+        - old_slug가 현재 다른 Tag의 slug로 쓰이고 있으면(충돌) history 저장을 건너뜀(보수적)
+        """
+        old_slug = None
+        if self.pk:
+            old = Tag.objects.filter(pk=self.pk).values("slug").first()
+            if old:
+                old_slug = old.get("slug")
+
         if not (self.slug or "").strip():
             self.slug = self._unique_slugify(self.name, instance_pk=self.pk, max_len=60)
+
         super().save(*args, **kwargs)
+
+        if self.pk and old_slug and (old_slug != self.slug):
+            old_slug = (old_slug or "").strip()
+            if old_slug:
+                # 다른 태그가 현재 slug로 사용 중이면 redirect ambiguity 방지 위해 기록하지 않음
+                if Tag.objects.filter(slug=old_slug).exclude(pk=self.pk).exists():
+                    return
+                try:
+                    TagSlugHistory.objects.get_or_create(
+                        old_slug=old_slug,
+                        defaults={"tag": self},
+                    )
+                except IntegrityError:
+                    pass
+
+
+class TagSlugHistory(models.Model):
+    """
+    Tag slug 변경 이력:
+    - /tags/<old_slug>/ 접근 시 canonical(/tags/<tag.slug>/)로 redirect 하기 위함
+    """
+    tag = models.ForeignKey("Tag", on_delete=models.CASCADE, related_name="slug_history")
+    old_slug = models.CharField(max_length=60, unique=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.old_slug} -> {self.tag.slug}"
 
 
 class Post(models.Model):

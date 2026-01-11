@@ -1,7 +1,8 @@
 ﻿from django.core.management import call_command
 from django.test import TestCase
+from django.utils.encoding import iri_to_uri  # ✅ 추가: 기대값을 Location/HX-Redirect 표준(ASCII)로 맞춤
 
-from apps.blog.models import Country, Tag, Post, PostSlugHistory
+from apps.blog.models import Country, Tag, Post, PostSlugHistory, TagSlugHistory
 
 
 class AuditContentCommandTests(TestCase):
@@ -48,3 +49,35 @@ class FixSlugHistoryCommandTests(TestCase):
 
         call_command("fix_slug_history", "--apply")
         self.assertEqual(PostSlugHistory.objects.count(), 0)
+
+
+class TagSlugHistoryRedirectTests(TestCase):
+    def test_unicode_tag_slug_resolves_200(self):
+        tag = Tag.objects.create(name="온천")  # slug 자동: '온천' (unicode)
+        resp = self.client.get(f"/tags/{tag.slug}/")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_old_tag_slug_redirects_to_canonical_and_keeps_query(self):
+        tag = Tag.objects.create(name="온천", slug="spa")
+        tag.slug = "온천"
+        tag.save()
+
+        self.assertEqual(TagSlugHistory.objects.count(), 1)
+        self.assertTrue(TagSlugHistory.objects.filter(old_slug="spa").exists())
+
+        resp = self.client.get("/tags/spa/?page=2&q=x&sort=old")
+        self.assertEqual(resp.status_code, 301)
+
+        expected = iri_to_uri("/tags/온천/?page=2&q=x&sort=old")
+        self.assertEqual(resp["Location"], expected)
+
+    def test_old_tag_slug_htmx_returns_204_with_hx_redirect(self):
+        tag = Tag.objects.create(name="온천", slug="spa")
+        tag.slug = "온천"
+        tag.save()
+
+        resp = self.client.get("/tags/spa/?q=x", HTTP_HX_REQUEST="true")
+        self.assertEqual(resp.status_code, 204)
+
+        expected = iri_to_uri("/tags/온천/?q=x")
+        self.assertEqual(resp["HX-Redirect"], expected)
