@@ -1,6 +1,6 @@
 ﻿from django.core.management import call_command
 from django.test import TestCase
-from django.utils.encoding import iri_to_uri  # ✅ 추가: 기대값을 Location/HX-Redirect 표준(ASCII)로 맞춤
+from django.utils.encoding import iri_to_uri
 
 from apps.blog.models import Country, Tag, Post, PostSlugHistory, TagSlugHistory
 
@@ -25,14 +25,11 @@ class FixSlugHistoryCommandTests(TestCase):
         c = Country.objects.create(name="Korea", slug="korea", iso_a2="KR", iso_a3="KOR")
         p = Post.objects.create(country=c, category=Post.Category.TRAVEL, title="T1", slug="t1")
 
-        # invalid slug (unicode jamo) - model save does not validate automatically
         PostSlugHistory.objects.create(post=p, country=c, category=Post.Category.TRAVEL, old_slug="ᄉ")
 
-        # dry-run should exit non-zero
         with self.assertRaises(SystemExit):
             call_command("fix_slug_history")
 
-        # apply should delete the row
         call_command("fix_slug_history", "--apply")
         self.assertEqual(PostSlugHistory.objects.count(), 0)
 
@@ -41,7 +38,6 @@ class FixSlugHistoryCommandTests(TestCase):
         p1 = Post.objects.create(country=c, category=Post.Category.TRAVEL, title="A", slug="alpha")
         p2 = Post.objects.create(country=c, category=Post.Category.TRAVEL, title="B", slug="beta")
 
-        # old_slug collides with p1's current slug in same (country, category)
         PostSlugHistory.objects.create(post=p2, country=c, category=Post.Category.TRAVEL, old_slug="alpha")
 
         with self.assertRaises(SystemExit):
@@ -53,8 +49,8 @@ class FixSlugHistoryCommandTests(TestCase):
 
 class TagSlugHistoryRedirectTests(TestCase):
     def test_unicode_tag_slug_resolves_200(self):
-        tag = Tag.objects.create(name="온천")  # slug 자동: '온천' (unicode)
-        resp = self.client.get(f"/tags/{tag.slug}/")
+        tag = Tag.objects.create(name="온천")  # slug 자동: '온천'
+        resp = self.client.get(f"/tags/{tag.slug}/", secure=True)  # ✅ https로 요청
         self.assertEqual(resp.status_code, 200)
 
     def test_old_tag_slug_redirects_to_canonical_and_keeps_query(self):
@@ -65,7 +61,7 @@ class TagSlugHistoryRedirectTests(TestCase):
         self.assertEqual(TagSlugHistory.objects.count(), 1)
         self.assertTrue(TagSlugHistory.objects.filter(old_slug="spa").exists())
 
-        resp = self.client.get("/tags/spa/?page=2&q=x&sort=old")
+        resp = self.client.get("/tags/spa/?page=2&q=x&sort=old", secure=True)  # ✅ https로 요청
         self.assertEqual(resp.status_code, 301)
 
         expected = iri_to_uri("/tags/온천/?page=2&q=x&sort=old")
@@ -76,7 +72,11 @@ class TagSlugHistoryRedirectTests(TestCase):
         tag.slug = "온천"
         tag.save()
 
-        resp = self.client.get("/tags/spa/?q=x", HTTP_HX_REQUEST="true")
+        resp = self.client.get(
+            "/tags/spa/?q=x",
+            HTTP_HX_REQUEST="true",
+            secure=True,  # ✅ https로 요청
+        )
         self.assertEqual(resp.status_code, 204)
 
         expected = iri_to_uri("/tags/온천/?q=x")
