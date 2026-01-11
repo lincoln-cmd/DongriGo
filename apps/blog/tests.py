@@ -50,8 +50,15 @@ class FixSlugHistoryCommandTests(TestCase):
 class TagSlugHistoryRedirectTests(TestCase):
     def test_unicode_tag_slug_resolves_200(self):
         tag = Tag.objects.create(name="온천")  # slug 자동: '온천'
-        resp = self.client.get(f"/tags/{tag.slug}/", secure=True)  # ✅ https로 요청
+        # ✅ CI의 ManifestStaticFilesStorage(collectstatic 미실행) 환경에서 home.html 렌더 시 favicon manifest 에러가 날 수 있음.
+        # ✅ 따라서 기능 검증 목적(라우팅/응답 OK)에 맞춰 HTMX로 보드 partial만 렌더링한다.
+        resp = self.client.get(
+            f"/tags/{tag.slug}/",
+            secure=True,
+            HTTP_HX_REQUEST="true",
+        )
         self.assertEqual(resp.status_code, 200)
+        self.assertFalse("HX-Redirect" in resp.headers)
 
     def test_old_tag_slug_redirects_to_canonical_and_keeps_query(self):
         tag = Tag.objects.create(name="온천", slug="spa")
@@ -61,7 +68,7 @@ class TagSlugHistoryRedirectTests(TestCase):
         self.assertEqual(TagSlugHistory.objects.count(), 1)
         self.assertTrue(TagSlugHistory.objects.filter(old_slug="spa").exists())
 
-        resp = self.client.get("/tags/spa/?page=2&q=x&sort=old", secure=True)  # ✅ https로 요청
+        resp = self.client.get("/tags/spa/?page=2&q=x&sort=old", secure=True)
         self.assertEqual(resp.status_code, 301)
 
         expected = iri_to_uri("/tags/온천/?page=2&q=x&sort=old")
@@ -75,7 +82,7 @@ class TagSlugHistoryRedirectTests(TestCase):
         resp = self.client.get(
             "/tags/spa/?q=x",
             HTTP_HX_REQUEST="true",
-            secure=True,  # ✅ https로 요청
+            secure=True,
         )
         self.assertEqual(resp.status_code, 204)
 
