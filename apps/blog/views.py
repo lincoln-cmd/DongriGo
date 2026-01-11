@@ -9,9 +9,10 @@ from django.core.paginator import Paginator
 from django.db.models import Count, Prefetch, Q
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
+from django.utils.encoding import iri_to_uri  # ✅ 추가: Unicode URL -> ASCII(퍼센트 인코딩)로 정규화
 from django.views.decorators.http import require_POST
 
-from .models import Country, Post, PostImage, PostSlugHistory, Tag
+from .models import Country, Post, PostImage, PostSlugHistory, Tag, TagSlugHistory
 
 
 def get_tabs():
@@ -301,6 +302,8 @@ def home(request, country_slug=None, category_slug=None, post_slug=None, **kwarg
             )
             if h and h.post:
                 new_url = h.post.get_absolute_url()
+                new_url = iri_to_uri(new_url)  # ✅ 추가: 헤더/Location/HX-Redirect 모두 ASCII로
+
                 if is_htmx(request):
                     resp = HttpResponse("", status=204)
                     resp["HX-Redirect"] = new_url
@@ -415,6 +418,29 @@ def tag_detail(request, tag_slug: str):
     try:
         tag = Tag.objects.get(slug=tag_slug)
     except Tag.DoesNotExist:
+        # ✅ old slug → canonical redirect
+        h = (
+            TagSlugHistory.objects
+            .select_related("tag")
+            .filter(old_slug=tag_slug)
+            .order_by("-created_at")
+            .first()
+        )
+        if h and h.tag:
+            new_url = f"/tags/{h.tag.slug}/"
+            qs = (request.META.get("QUERY_STRING") or "").strip()
+            if qs:
+                new_url = f"{new_url}?{qs}"
+
+            new_url = iri_to_uri(new_url)  # ✅ 추가: HX-Redirect/Location에서 깨지지 않게 ASCII로 정규화
+
+            if is_htmx(request):
+                resp = HttpResponse("", status=204)
+                resp["HX-Redirect"] = new_url
+                return resp
+            return redirect(new_url, permanent=True)
+
+        # 기존 동작: tags index로
         if is_htmx(request):
             resp = HttpResponse("", status=204)
             resp["HX-Redirect"] = "/tags/"
